@@ -1,0 +1,23 @@
+﻿# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments (uv, venv, conda)
+.venv/
+env/
+venv/
+ENV/
+
+# Data and Logs (Crucial for QEC simulations)
+*.npy
+*.npz
+*.json
+*.csv
+*.log
+data/
+results/
+
+# IDEs
+.vscode/
+.idea/
