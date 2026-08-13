@@ -7,5 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "ldpc>=2.4.1",
     "marimo>=0.23.13",
+    "plotly>=6.9.0",
+    "pyvis>=0.3.2",
     "stim>=1.16.0",
 ]

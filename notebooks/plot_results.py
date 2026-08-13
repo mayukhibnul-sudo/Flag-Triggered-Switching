@@ -13,6 +13,26 @@ def introduction():
 
 @app.cell
 def imports():
+    import os
+    import sys
+
+    # 1. Dynamically locate the directory where this notebook script lives
+    # Marimo populates __file__ when running/editing notebooks
+    try:
+        notebook_dir = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        # Fallback if executing in an interactive shell context without __file__
+        notebook_dir = os.getcwd()
+
+    # 2. Go up one level to the project root (C:\qec_decoder_switch)
+    project_root = os.path.abspath(os.path.join(notebook_dir, ".."))
+    src_path = os.path.join(project_root, "src")
+
+    # 3. Inject paths cleanly if they exist
+    for path in [project_root, src_path]:
+        if os.path.exists(path) and path not in sys.path:
+            sys.path.insert(0, path)
+
     import numpy as np
     from qec_sim.main import evaluate_decoder
 
@@ -21,38 +41,44 @@ def imports():
 
 @app.cell
 def control_panel(marimo):
-    # Interactive UI Sliders to sweep values
-    distance_slider = marimo.ui.slider(start=3, stop=7, step=2, value=3, label="Code Distance (d)")
+    # Dropdown to select the code geometry type matching our new main.py factory
+    code_selector = marimo.ui.dropdown(
+        options=["Generalized Bicycle (d=5)", "Bivariate Bicycle [[144,12,12]]"],
+        value="Bivariate Bicycle [[144,12,12]]",
+        label="QLDPC Code Architecture"
+    )
+
+    # Simulation sample size adjustment
     shots_slider = marimo.ui.slider(start=50, stop=500, step=50, value=100, label="Simulation Shots")
 
     # Combine them into a layout object so Marimo renders them on screen
     ui_layout = marimo.vstack([
-        marimo.md("### Simulation Controls"),
-        distance_slider,
+        marimo.md("### FTS Simulation Controls"),
+        code_selector,
         shots_slider
     ])
 
-    # Returning ui_layout ensures the sliders actually paint on the dashboard UI
-    return distance_slider, shots_slider
+    # Returning these variables ensures they are drawn and accessible by other cells
+    return code_selector, shots_slider
 
 
 @app.cell
-def run_simulation_sweep(distance_slider, evaluate_decoder, np, shots_slider):
-    # Sweep physical error rates from 1% to 10%
+def run_simulation_sweep(code_selector, evaluate_decoder, np, shots_slider):
+    # Sweep physical error rates from 1% to 10% across 5 data points
     physical_rates = np.linspace(0.01, 0.10, 5)
     logical_rates = []
     fallback_rates = []
 
-    # Run the backend for each noise point
+    # Run the circuit-level backend for each noise point
     for p in physical_rates:
         log_e, fallback = evaluate_decoder(
-            distance=distance_slider.value, 
-            rounds=distance_slider.value, 
+            code_type=code_selector.value, 
             physical_error_rate=p, 
             num_shots=shots_slider.value
         )
         logical_rates.append(log_e)
         fallback_rates.append(fallback * 100) # Convert to %
+
     return fallback_rates, logical_rates, physical_rates
 
 
@@ -78,7 +104,7 @@ def plot_results(fallback_rates, logical_rates, physical_rates):
         ax1.set_title("Decoder Threshold Tracking")
         ax1.grid(True)
 
-        # Plot 2: OSD Workload Transferred
+        # Plot 2: OSD Workload Transferred (Flag-Triggered Switching efficiency)
         ax2.plot(physical_rates, fallback_rates, 's--', color='tab:red', label="OSD Fallback %")
         ax2.set_xlabel("Physical Error Rate (p)")
         ax2.set_ylabel("OSD Fallback Rate (%)")
@@ -86,12 +112,13 @@ def plot_results(fallback_rates, logical_rates, physical_rates):
         ax2.grid(True)
 
         plt.tight_layout()
-    
+
         # Assign the final figure object to our variable
         output_to_display = fig
 
-    # 4. CRITICAL: Put the variable completely outside the if/else at the root level!
+    # 4. CRITICAL: Print the output variable block at the root level for Marimo to render it
     output_to_display
+
     return
 
 
