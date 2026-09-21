@@ -1,12 +1,9 @@
 import marimo
 
-__generated_with = "0.24.2"
+__generated_with = "0.23.13"
 app = marimo.App(width="medium", app_title="Decoder Switching for BB Codes")
 
 
-# =============================================================================
-# 0. Setup
-# =============================================================================
 @app.cell
 def _():
     import json
@@ -19,7 +16,7 @@ def _():
     import scipy.sparse as sp
     import stim
 
-    return asdict, dataclass, field, json, mo, np, plt, sp, stim, time
+    return dataclass, mo, np, sp, stim
 
 
 @app.cell(hide_code=True)
@@ -97,9 +94,6 @@ def _(mo):
     return STATUS_ICON, all_pass, render_checks, run_checks
 
 
-# =============================================================================
-# 1. Motivation
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -120,9 +114,6 @@ def _(mo):
     return
 
 
-# =============================================================================
-# 2. GF(2) linear algebra
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -136,6 +127,10 @@ def _(mo):
 
 @app.cell
 def _(np):
+    def _as_gf2(M):
+        """Dense uint8 copy of M with entries reduced mod 2 (accepts scipy.sparse)."""
+        return np.array(M.toarray() if hasattr(M, "toarray") else M, dtype=np.uint8) % 2
+
     def gf2_rref(M):
         """
         Reduced row echelon form of M over GF(2).
@@ -146,13 +141,31 @@ def _(np):
             (R, pivots): R is a uint8 array the same shape as M in RREF;
             pivots is the list of pivot column indices, in increasing order.
         """
-        # TODO
-        raise NotImplementedError("gf2_rref")
+        R = _as_gf2(M)
+        n_rows, n_cols = R.shape
+        pivots = []
+        r = 0                                   # next row to place a pivot in
+        for c in range(n_cols):
+            if r == n_rows:                     # every row has a pivot: done
+                break
+            candidates = np.flatnonzero(R[r:, c])
+            if candidates.size == 0:            # no 1 at or below row r: free column
+                continue
+            p = r + candidates[0]
+            if p != r:
+                R[[r, p]] = R[[p, r]]           # swap the pivot row into place
+            others = np.flatnonzero(R[:, c])
+            others = others[others != r]
+            R[others] ^= R[r]                   # clear column c above AND below (XOR = add mod 2)
+            pivots.append(c)
+            r += 1
+        return R, pivots
 
     def gf2_rank(M):
         """Rank of M over GF(2). Must return 0 for an empty matrix."""
-        # TODO
-        raise NotImplementedError("gf2_rank")
+        if M.shape[0] == 0 or M.shape[1] == 0:
+            return 0
+        return len(gf2_rref(M)[1])
 
     def gf2_nullspace(M):
         """
@@ -161,8 +174,17 @@ def _(np):
         Returns:
             uint8 array of shape (n_cols - rank(M), n_cols); rows are basis vectors.
         """
-        # TODO
-        raise NotImplementedError("gf2_nullspace")
+        R, pivots = gf2_rref(M)
+        n_cols = R.shape[1]
+        pivot_set = set(pivots)
+        free = [c for c in range(n_cols) if c not in pivot_set]
+        basis = np.zeros((len(free), n_cols), dtype=np.uint8)
+        for i, f in enumerate(free):
+            basis[i, f] = 1
+            # Row r of R reads: x[pivots[r]] + sum_f R[r, f] x[f] = 0.
+            # With only x[f] = 1, and -1 = +1 mod 2, this gives x[pivots[r]] = R[r, f].
+            basis[i, pivots] = R[:len(pivots), f]
+        return basis
 
     def gf2_quotient_basis(subspace, ambient):
         """
@@ -171,8 +193,19 @@ def _(np):
         Used for logical operators: logicals = ker(...) modulo stabilisers.
         Returns a uint8 array with shape (dim, n_cols); may have zero rows.
         """
-        # TODO
-        raise NotImplementedError("gf2_quotient_basis")
+        span = _as_gf2(subspace)
+        amb = _as_gf2(ambient)
+        current_rank = gf2_rank(span)
+        kept = []
+        for row in amb:
+            trial = np.vstack([span, row[None, :]])
+            trial_rank = gf2_rank(trial)
+            if trial_rank > current_rank:       # row adds something new: keep it
+                kept.append(row)
+                span, current_rank = trial, trial_rank
+        if not kept:
+            return np.zeros((0, amb.shape[1]), dtype=np.uint8)
+        return np.array(kept, dtype=np.uint8)
 
     return gf2_nullspace, gf2_quotient_basis, gf2_rank, gf2_rref
 
@@ -232,9 +265,6 @@ def _(
     return (tests_gf2,)
 
 
-# =============================================================================
-# 3. Bivariate bicycle codes
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -289,11 +319,11 @@ def _(dataclass, np):
                                 b_terms=[(0, 3), (1, 0), (2, 0)], n=288, k=12, d=18),
     }
     # a_terms / b_terms: each (i, j) is the monomial x^i y^j.
-    return BB_PRESETS, CSSCode
+    return (BB_PRESETS,)
 
 
 @app.cell
-def _(CSSCode, gf2_nullspace, gf2_quotient_basis, gf2_rank, np, sp):
+def _():
     def make_css_code(hx, hz, name="code"):
         """
         Build a CSSCode from two check matrices.
@@ -326,7 +356,7 @@ def _(CSSCode, gf2_nullspace, gf2_quotient_basis, gf2_rank, np, sp):
         s = presets[key]
         return make_bb_code(s["L"], s["M"], s["a_terms"], s["b_terms"], name=key)
 
-    return bb_from_preset, make_bb_code, make_css_code
+    return bb_from_preset, make_css_code
 
 
 @app.cell
@@ -407,9 +437,6 @@ def _(
     return (tests_codes,)
 
 
-# =============================================================================
-# 4. Circuit-level noise
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -431,7 +458,7 @@ def _(mo):
 
 
 @app.cell
-def _(np, stim):
+def _():
     def build_memory_circuit(code, rounds, p, use_flags=False, idle_noise=False):
         """
         Z-basis memory experiment for a CSS code under circuit-level noise.
@@ -568,9 +595,6 @@ def _(
     return (tests_circuit,)
 
 
-# =============================================================================
-# 5. Detector error model
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -584,22 +608,19 @@ def _(mo):
     return
 
 
-@app.cell
-def _(np, sp):
-    def dem_to_matrices(dem):
-        """
-        Convert a stim.DetectorErrorModel into (H, L, priors).
+@app.function
+def dem_to_matrices(dem):
+    """
+    Convert a stim.DetectorErrorModel into (H, L, priors).
 
-        H:      csr uint8, (num_detectors, num_faults)
-        L:      csr uint8, (num_observables, num_faults)
-        priors: float array, (num_faults,)
-        Fault j must be the j-th `error` instruction of dem.flattened() -- the
-        tests check this against Stim's own sampler.
-        """
-        # TODO
-        raise NotImplementedError("dem_to_matrices")
-
-    return (dem_to_matrices,)
+    H:      csr uint8, (num_detectors, num_faults)
+    L:      csr uint8, (num_observables, num_faults)
+    priors: float array, (num_faults,)
+    Fault j must be the j-th `error` instruction of dem.flattened() -- the
+    tests check this against Stim's own sampler.
+    """
+    # TODO
+    raise NotImplementedError("dem_to_matrices")
 
 
 @app.cell
@@ -607,7 +628,6 @@ def _(
     BB_PRESETS,
     bb_from_preset,
     build_memory_circuit,
-    dem_to_matrices,
     np,
     render_checks,
     run_checks,
@@ -641,9 +661,6 @@ def _(
     return (tests_dem,)
 
 
-# =============================================================================
-# 6. Decoders
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -676,7 +693,7 @@ def _(dataclass, np):
 
 
 @app.cell
-def _(DecodeResult, np, sp):
+def _():
     class PeelingDecoder:
         """
         Greedy peeling over the DEM.
@@ -721,7 +738,6 @@ def _(
     PeelingDecoder,
     bb_from_preset,
     build_memory_circuit,
-    dem_to_matrices,
     np,
     render_checks,
     run_checks,
@@ -775,9 +791,6 @@ def _(
     return (tests_decoders,)
 
 
-# =============================================================================
-# 7. Switch policies
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -799,7 +812,7 @@ def _(mo):
 
 
 @app.cell
-def _(DecodeResult, np):
+def _():
     TRIGGERS = ("never", "always", "primary_fail", "flag", "flag_or_fail")
 
     class SwitchPolicy:
@@ -819,7 +832,7 @@ def _(DecodeResult, np):
             # TODO
             raise NotImplementedError("SwitchPolicy.decode")
 
-    return SwitchPolicy, TRIGGERS
+    return (SwitchPolicy,)
 
 
 @app.cell
@@ -890,9 +903,6 @@ def _(DecodeResult, SwitchPolicy, np, render_checks, run_checks):
     return (tests_switch,)
 
 
-# =============================================================================
-# 8. Statistics and benchmarking
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -925,7 +935,7 @@ def _(dataclass):
 
 
 @app.cell
-def _(Metrics, np, time):
+def _():
     def wilson(k, n, z=1.96):
         """Wilson score interval for k successes in n trials -> (p_hat, low, high)."""
         # TODO
@@ -953,7 +963,6 @@ def _(
     DecodeResult,
     bb_from_preset,
     build_memory_circuit,
-    dem_to_matrices,
     np,
     render_checks,
     run_benchmark,
@@ -1012,9 +1021,6 @@ def _(
     return (tests_stats,)
 
 
-# =============================================================================
-# 9. Reproducibility
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -1042,7 +1048,7 @@ def _(dataclass):
 
 
 @app.cell
-def _(ExperimentConfig, Metrics, asdict, json):
+def _():
     def save_results(path, config, results):
         """Write {'config': ..., 'results': {policy: Metrics}} as JSON."""
         # TODO
@@ -1082,9 +1088,6 @@ def _(
     return (tests_repro,)
 
 
-# =============================================================================
-# 10. Status dashboard
-# =============================================================================
 @app.cell(hide_code=True)
 def _(
     STATUS_ICON,
@@ -1121,9 +1124,6 @@ def _(
     return (core_ready,)
 
 
-# =============================================================================
-# 11. Experiments
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
@@ -1174,18 +1174,7 @@ def _(
 
 
 @app.cell
-def _(
-    BB_PRESETS,
-    BpOsdDecoder,
-    PeelingDecoder,
-    SwitchPolicy,
-    TRIGGERS,
-    bb_from_preset,
-    build_memory_circuit,
-    dem_to_matrices,
-    flag_detector_mask,
-    run_benchmark,
-):
+def _():
     def run_ablation(config):
         """
         E1. Build the code, circuit and DEM from `config`; construct one
@@ -1206,7 +1195,7 @@ def _(
 
 
 @app.cell
-def _(np, plt):
+def _():
     def plot_ablation(results):
         """Bar chart of LER with Wilson error bars, one bar per trigger. Returns a Figure."""
         # TODO
@@ -1255,7 +1244,7 @@ def _(config, core_ready, mo, plot_ablation, run_ablation, run_e1):
               "not a result.") if _suspicious else mo.md(""),
         plot_ablation(e1_results),
     ])
-    return (e1_results,)
+    return
 
 
 @app.cell
@@ -1267,12 +1256,9 @@ def _(config, core_ready, mo, np, plot_sweep, run_e2, run_sweep):
     e2_sweep = run_sweep(config, e2_ps)
     mo.vstack([mo.md(f"### E2 — {config.code}, T={config.rounds}, {config.shots} shots/point"),
                plot_sweep(e2_sweep)])
-    return (e2_sweep,)
+    return
 
 
-# =============================================================================
-# 12. Results, discussion, conclusion
-# =============================================================================
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
