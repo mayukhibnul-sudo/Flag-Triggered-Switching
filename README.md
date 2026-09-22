@@ -25,12 +25,25 @@ presentation.
 
 ## Quick start
 
-Tested with Python 3.12.
+The project uses [uv](https://docs.astral.sh/uv/) and Python 3.12.
+
+**Cloning the repository:**
 
 ```bash
-pip install "stim>=1.16" "ldpc>=2.4" "numpy>=2.0" "scipy>=1.13" "marimo>=0.24" "matplotlib>=3.9"
-marimo edit decoderSwitch.py
+uv sync                                  # creates .venv with the exact versions in uv.lock
+uv run marimo edit decoderSwitch.py
 ```
+
+**Setting up from scratch** (only needed once, by whoever creates the project):
+
+```bash
+uv init --bare --python 3.12             # skip if pyproject.toml already exists
+uv add stim ldpc numpy scipy marimo matplotlib
+```
+
+Commit both `pyproject.toml` and `uv.lock`. The lock file pins every package
+version, so everyone who runs `uv sync` gets an identical environment — which also
+means results can be reproduced exactly.
 
 In the editor, the notebook runs its test suite automatically. Open **§10
 Implementation status**: every row should show ✅. The experiments in §11 stay
@@ -38,10 +51,11 @@ locked until all tests pass.
 
 | Command | What it does |
 |---|---|
-| `marimo edit decoderSwitch.py` | Interactive editor; tests re-run when you change code |
-| `marimo run decoderSwitch.py` | Read-only app view, code hidden |
-| `marimo check decoderSwitch.py` | Lint the notebook |
-| `marimo export html decoderSwitch.py -o report.html` | Static HTML snapshot, test results included |
+| `uv run marimo edit decoderSwitch.py` | Interactive editor; tests re-run when you change code |
+| `uv run marimo run decoderSwitch.py` | Read-only app view, code hidden |
+| `uv run marimo check decoderSwitch.py` | Lint the notebook |
+| `uv run marimo export html decoderSwitch.py -o report.html` | Static HTML snapshot, test results included |
+| `uv run python run_sweep.py` | Run a headless experiment script (see below) |
 
 ---
 
@@ -121,7 +135,8 @@ takes a couple of minutes and E2 roughly ten.
 
 Resolving logical error rates near 10⁻³ needs around 10⁵ shots per point — too
 many for the notebook's buttons. Run such experiments as scripts; the notebook's
-functions are importable:
+functions are importable. Save this as `run_sweep.py` and run it with
+`uv run python run_sweep.py`:
 
 ```python
 import dataclasses
@@ -159,9 +174,9 @@ reproducible from the repository alone; exploratory runs are better left out.
 ## Presenting
 
 The default view scrolls top to bottom. For slides, open the notebook in
-`marimo edit`, switch the layout to **Slides** in the app view, and save; marimo
-stores the layout alongside the notebook, and `marimo run decoderSwitch.py` then
-presents it as slides. Commit the layout file so the slides travel with the code.
+`uv run marimo edit`, switch the layout to **Slides** in the app view, and save;
+marimo stores the layout alongside the notebook, and
+`uv run marimo run decoderSwitch.py` then presents it as slides. Commit the layout file so the slides travel with the code.
 
 ---
 
