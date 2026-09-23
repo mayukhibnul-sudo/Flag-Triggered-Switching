@@ -6,7 +6,11 @@ app = marimo.App(width="medium", app_title="Decoder Switching for BB Codes")
 
 @app.cell
 def _():
+    import csv
+    import datetime
+    import glob
     import json
+    import os
     import time
     from dataclasses import asdict, dataclass, field
 
@@ -16,7 +20,27 @@ def _():
     import scipy.sparse as sp
     import stim
 
-    return asdict, dataclass, field, json, mo, np, plt, sp, stim, time
+    # Results always go next to the notebook, wherever marimo was launched from.
+    _nb_dir = mo.notebook_dir()
+    RESULTS_DIR = os.path.join(os.path.abspath(str(_nb_dir) if _nb_dir else "."), "results")
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    return (
+        RESULTS_DIR,
+        asdict,
+        csv,
+        dataclass,
+        datetime,
+        field,
+        glob,
+        json,
+        mo,
+        np,
+        os,
+        plt,
+        sp,
+        stim,
+        time,
+    )
 
 
 @app.cell(hide_code=True)
@@ -48,7 +72,7 @@ def _(mo):
     8. Statistics and benchmarking
     9. Reproducibility
     10. Implementation status
-    11. Experiments
+    11. Experiments: E0 validation and flag cost, E1 ablation, E2 sweep, E3 decoder zoo
     12. Results, discussion, conclusion
     """)
     return
@@ -127,7 +151,7 @@ def _(mo):
 
 @app.cell
 def _(np):
-    def _as_gf2(M):
+    def gf2_dense(M):
         """Dense uint8 copy of M with entries reduced mod 2 (accepts scipy.sparse)."""
         return np.array(M.toarray() if hasattr(M, "toarray") else M, dtype=np.uint8) % 2
 
@@ -141,7 +165,7 @@ def _(np):
             (R, pivots): R is a uint8 array the same shape as M in RREF;
             pivots is the list of pivot column indices, in increasing order.
         """
-        R = _as_gf2(M)
+        R = gf2_dense(M)
         n_rows, n_cols = R.shape
         pivots = []
         r = 0                                   # next row to place a pivot in
@@ -193,8 +217,8 @@ def _(np):
         Used for logical operators: logicals = ker(...) modulo stabilisers.
         Returns a uint8 array with shape (dim, n_cols); may have zero rows.
         """
-        span = _as_gf2(subspace)
-        amb = _as_gf2(ambient)
+        span = gf2_dense(subspace)
+        amb = gf2_dense(ambient)
         current_rank = gf2_rank(span)
         kept = []
         for row in amb:
@@ -207,7 +231,7 @@ def _(np):
             return np.zeros((0, amb.shape[1]), dtype=np.uint8)
         return np.array(kept, dtype=np.uint8)
 
-    return gf2_nullspace, gf2_quotient_basis, gf2_rank, gf2_rref
+    return gf2_dense, gf2_nullspace, gf2_quotient_basis, gf2_rank, gf2_rref
 
 
 @app.cell
@@ -1154,7 +1178,7 @@ def _(DecodeResult, np, sp):
                         queued[d3] = True
             return DecodeResult(e, not s.any(), visits)
 
-    def _ldpc_kwargs(priors, max_iter):
+    def ldpc_kwargs(priors, max_iter):
         """Settings shared by every BP-family decoder, so comparisons are fair."""
         return dict(error_channel=[float(x) for x in priors], max_iter=max_iter,
                     bp_method="ms", ms_scaling_factor=0.625, schedule="parallel")
@@ -1169,7 +1193,7 @@ def _(DecodeResult, np, sp):
         """
 
         def __init__(self, H, priors, max_iter=20):
-            self.dec = _LdpcBp(sp.csr_matrix(H, dtype=np.uint8), **_ldpc_kwargs(priors, max_iter))
+            self.dec = _LdpcBp(sp.csr_matrix(H, dtype=np.uint8), **ldpc_kwargs(priors, max_iter))
 
         def decode(self, syndrome):
             e = self.dec.decode(np.asarray(syndrome, dtype=np.uint8))
@@ -1188,7 +1212,7 @@ def _(DecodeResult, np, sp):
         def __init__(self, H, priors, max_iter=20, osd_order=0):
             self.dec = _LdpcBpOsd(sp.csr_matrix(H, dtype=np.uint8),
                                   osd_method="osd_cs", osd_order=osd_order,
-                                  **_ldpc_kwargs(priors, max_iter))
+                                  **ldpc_kwargs(priors, max_iter))
 
         def decode(self, syndrome):
             e = self.dec.decode(np.asarray(syndrome, dtype=np.uint8))
@@ -1206,14 +1230,14 @@ def _(DecodeResult, np, sp):
         def __init__(self, H, priors, max_iter=20, lsd_order=0):
             self.dec = _LdpcBpLsd(sp.csr_matrix(H, dtype=np.uint8),
                                   lsd_method="LSD_CS", lsd_order=lsd_order,
-                                  **_ldpc_kwargs(priors, max_iter))
+                                  **ldpc_kwargs(priors, max_iter))
 
         def decode(self, syndrome):
             e = self.dec.decode(np.asarray(syndrome, dtype=np.uint8))
             return DecodeResult(np.asarray(e, dtype=np.uint8), True,
                                 int(self.dec.iter), soft=np.array(self.dec.log_prob_ratios))
 
-    return BpDecoder, BpLsdDecoder, BpOsdDecoder, PeelingDecoder
+    return BpDecoder, BpLsdDecoder, BpOsdDecoder, PeelingDecoder, ldpc_kwargs
 
 
 @app.cell
@@ -1356,9 +1380,11 @@ def _(mo):
     | `flag` | a flag fired (**before** the primary runs), else on primary failure |
     | `flag_or_fail` | same as `flag`; kept separate so ablations can differ |
 
-    **Invariant:** no policy can have a lower logical error rate than `always`
-    — the secondary sees the same syndrome. Beating it means a bug or an unfair
-    baseline, never a result.
+    **Beating `always` is possible.** A policy can fail less than `always` when
+    the primary is right on shots where the secondary errs: E1 at 25,000 shots
+    found peeling correct and BP+OSD-0 wrong on 14 shots, and never the reverse.
+    So a policy beating `always` is not automatically a bug, but it must be
+    confirmed with a paired test on identical shots (E3 does this).
     """)
     return
 
@@ -1366,7 +1392,7 @@ def _(mo):
 @app.cell
 def _():
     TRIGGERS = ("never", "always", "primary_fail", "flag", "flag_or_fail")
-    _FLAG_TRIGGERS = ("flag", "flag_or_fail")
+    FLAG_TRIGGERS = ("flag", "flag_or_fail")
 
     class SwitchPolicy:
         """
@@ -1384,7 +1410,7 @@ def _():
         def __init__(self, primary, secondary, trigger, flag_mask=None, name=None):
             if trigger not in TRIGGERS:
                 raise ValueError(f"unknown trigger {trigger!r}; expected one of {TRIGGERS}")
-            if trigger in _FLAG_TRIGGERS:
+            if trigger in FLAG_TRIGGERS:
                 if flag_mask is None or not np.any(flag_mask):
                     raise ValueError(
                         f"trigger {trigger!r} needs a flag mask with at least one flag "
@@ -1397,7 +1423,7 @@ def _():
             self.name = name or trigger
 
         def _flag_fired(self, syndrome):
-            if self.trigger not in _FLAG_TRIGGERS:
+            if self.trigger not in FLAG_TRIGGERS:
                 return False
             s = np.asarray(syndrome)
             if s.shape != self.flag_mask.shape:
@@ -1425,7 +1451,7 @@ def _():
             return DecodeResult(r.correction, r.converged, r.work,
                                 escalated=False, soft=r.soft)
 
-    return (SwitchPolicy,)
+    return FLAG_TRIGGERS, SwitchPolicy
 
 
 @app.cell
@@ -1621,13 +1647,13 @@ def _(Metrics, np, time):
 def _(np, plt):
     # One colour per policy, assigned by order of first appearance, so the same
     # policy has the same colour in every figure built from the same results.
-    _PALETTE = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e",
+    PLOT_PALETTE = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e",
                 "#8c564b", "#e377c2", "#17becf", "#7f7f7f", "#bcbd22"]
 
-    def _colours(names):
-        return {n: _PALETTE[i % len(_PALETTE)] for i, n in enumerate(names)}
+    def plot_colours(names):
+        return {n: PLOT_PALETTE[i % len(PLOT_PALETTE)] for i, n in enumerate(names)}
 
-    def _ler_marks(ax, x, metrics, colour, label=None, horizontal=False):
+    def plot_ler_marks(ax, x, metrics, colour, label=None, horizontal=False):
         """
         Plot LER with Wilson error bars on a log axis. A zero-failure point has
         no finite log value, so it is drawn as a hollow downward triangle at its
@@ -1653,12 +1679,12 @@ def _(np, plt):
         axis; (b) fraction of shots escalated to the strong decoder.
         """
         names = list(results)
-        col = _colours(names)
+        col = plot_colours(names)
         y = np.arange(len(names))[::-1]
         fig, (a, b) = plt.subplots(1, 2, figsize=(11, 0.55 * len(names) + 1.8),
                                    sharey=True, gridspec_kw=dict(width_ratios=[3, 2]))
         for yi, n in zip(y, names):
-            _ler_marks(a, [yi], [results[n]], col[n], horizontal=True)
+            plot_ler_marks(a, [yi], [results[n]], col[n], horizontal=True)
             b.barh(yi, results[n].escalation_rate, color=col[n], alpha=0.85)
             b.text(results[n].escalation_rate + 0.01, yi, f"{results[n].escalation_rate:.0%}",
                    va="center", fontsize=9)
@@ -1687,7 +1713,7 @@ def _(np, plt):
         """
         ps = sorted(sweep)
         names = list(sweep[ps[0]])
-        col = _colours(names)
+        col = plot_colours(names)
         fig, (a, b) = plt.subplots(1, 2, figsize=(12, 4.6))
         for i, n in enumerate(names):
             ms = [sweep[p][n] for p in ps]
@@ -1695,7 +1721,7 @@ def _(np, plt):
             # invariant makes common) would otherwise hide behind each other
             dodge = 1 + 0.035 * (i - (len(names) - 1) / 2)
             xs = [p * dodge for p in ps]
-            _ler_marks(a, xs, ms, col[n], label=n)
+            plot_ler_marks(a, xs, ms, col[n], label=n)
             a.plot(xs, [m.ler if m.failures else m.ci_high for m in ms],
                    color=col[n], alpha=0.5, lw=1)
             b.plot(ps, [m.escalation_rate for m in ms], "s-", color=col[n], label=n)
@@ -1753,7 +1779,7 @@ def _(np, plt):
         if missing:
             raise ValueError(f"no per-shot samples for {missing}: "
                              "call run_benchmark(..., keep_samples=True)")
-        col = _colours(list(results))
+        col = plot_colours(list(results))
         fig, ax = plt.subplots(figsize=(9, 4.6))
         for n, m in results.items():
             t = np.sort(np.maximum(m.samples["time_us"], 1e-3))
@@ -1776,10 +1802,10 @@ def _(np, plt):
         Accuracy versus tail latency, one point per policy: lower-left is better.
         The thesis claim is a policy that moves left without moving up.
         """
-        col = _colours(list(results))
+        col = plot_colours(list(results))
         fig, ax = plt.subplots(figsize=(8, 5))
         for i, (n, m) in enumerate(results.items()):
-            _ler_marks(ax, [m.time_p99_us], [m], col[n], label=n)
+            plot_ler_marks(ax, [m.time_p99_us], [m], col[n], label=n)
             ax.annotate(n, (m.time_p99_us, m.ler if m.failures else m.ci_high),
                         textcoords="offset points", xytext=(8, 14 - 12 * (i % 4)),
                         fontsize=8, color=col[n])
@@ -1792,7 +1818,16 @@ def _(np, plt):
         fig.tight_layout()
         return fig
 
-    return plot_ablation, plot_latency, plot_outcomes, plot_sweep, plot_tradeoff
+    return (
+        PLOT_PALETTE,
+        plot_ablation,
+        plot_colours,
+        plot_latency,
+        plot_ler_marks,
+        plot_outcomes,
+        plot_sweep,
+        plot_tradeoff,
+    )
 
 
 @app.cell
@@ -2110,15 +2145,16 @@ def _(dataclass):
         seed: int = 20260921
         use_flags: bool = True
         osd_order: int = 0
+        workers: int = 1          # CPU processes used for decoding; 1 = sequential
 
     return (ExperimentConfig,)
 
 
 @app.cell
 def _(ExperimentConfig, Metrics, asdict, json, np):
-    _SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 1
 
-    def _software_versions():
+    def software_versions():
         from importlib.metadata import PackageNotFoundError, version
         out = {}
         for pkg in ("stim", "ldpc", "numpy", "scipy", "marimo"):
@@ -2128,33 +2164,33 @@ def _(ExperimentConfig, Metrics, asdict, json, np):
                 out[pkg] = None
         return out
 
-    def _metrics_to_json(m, include_samples):
+    def metrics_to_json(m, include_samples):
         d = asdict(m)
         samples = d.pop("samples", None)
         if include_samples and samples is not None:
             d["samples"] = {k: np.asarray(v).tolist() for k, v in samples.items()}
         return d
 
-    def _metrics_from_json(d):
+    def metrics_from_json(d):
         d = dict(d)
         samples = d.pop("samples", None)
         if samples is not None:
             samples = {k: np.asarray(v) for k, v in samples.items()}
         return Metrics(**d, samples=samples)
 
-    def _write(path, payload):
+    def write_result_file(path, payload):
         import datetime
         import os
-        payload = {"schema": _SCHEMA_VERSION,
+        payload = {"schema": SCHEMA_VERSION,
                    "created": datetime.datetime.now().isoformat(timespec="seconds"),
-                   "software": _software_versions(), **payload}
+                   "software": software_versions(), **payload}
         folder = os.path.dirname(os.path.abspath(path))
         os.makedirs(folder, exist_ok=True)
         with open(path, "w") as fh:
             json.dump(payload, fh, indent=1)
         return path
 
-    def _read(path, kind):
+    def read_result_file(path, kind):
         with open(path) as fh:
             d = json.load(fh)
         if d.get("kind") != kind:
@@ -2167,37 +2203,230 @@ def _(ExperimentConfig, Metrics, asdict, json, np):
         creation time and package versions. Per-shot samples are dropped unless
         include_samples=True (they make files large).
         """
-        return _write(path, {
+        return write_result_file(path, {
             "kind": "ablation",
             "config": asdict(config),
-            "results": {n: _metrics_to_json(m, include_samples) for n, m in results.items()},
+            "results": {n: metrics_to_json(m, include_samples) for n, m in results.items()},
         })
 
     def load_results(path):
         """Inverse of save_results -> (ExperimentConfig, dict name -> Metrics)."""
-        d = _read(path, "ablation")
+        d = read_result_file(path, "ablation")
         return (ExperimentConfig(**d["config"]),
-                {n: _metrics_from_json(m) for n, m in d["results"].items()})
+                {n: metrics_from_json(m) for n, m in d["results"].items()})
 
     def save_sweep(path, config, sweep, include_samples=False):
         """Like save_results, for dict p -> dict policy -> Metrics."""
-        return _write(path, {
+        return write_result_file(path, {
             "kind": "sweep",
             "config": asdict(config),
             "points": [{"p": float(p),
-                        "results": {n: _metrics_to_json(m, include_samples)
+                        "results": {n: metrics_to_json(m, include_samples)
                                     for n, m in res.items()}}
                        for p, res in sweep.items()],
         })
 
     def load_sweep(path):
         """Inverse of save_sweep -> (ExperimentConfig, dict p -> dict name -> Metrics)."""
-        d = _read(path, "sweep")
+        d = read_result_file(path, "sweep")
         return (ExperimentConfig(**d["config"]),
-                {pt["p"]: {n: _metrics_from_json(m) for n, m in pt["results"].items()}
+                {pt["p"]: {n: metrics_from_json(m) for n, m in pt["results"].items()}
                  for pt in d["points"]})
 
-    return load_results, load_sweep, save_results, save_sweep
+    return (
+        SCHEMA_VERSION,
+        load_results,
+        load_sweep,
+        metrics_from_json,
+        metrics_to_json,
+        read_result_file,
+        save_results,
+        save_sweep,
+        software_versions,
+        write_result_file,
+    )
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Exporting results
+
+    Every experiment writes two things into `results/`, next to this notebook:
+
+    - a **data file** (`.json` for E1/E2, `.npz` for E3) that the notebook can
+      reload later, so nothing is lost when you close it;
+    - an **export folder** with the same name, holding every figure as PNG
+      (for slides) and PDF (vector, for LaTeX), every table as CSV, and a
+      `report.md` that links them together.
+
+    Exports are rewritten whenever a result is shown, so a reloaded run can be
+    re-exported after you change a plot.
+    """)
+    return
+
+
+@app.cell
+def _(csv, datetime, os, plt):
+    def export_bundle(data_path, title, figures, tables, notes=""):
+        """
+        Write figures (PNG + PDF), tables (CSV) and report.md into a folder named
+        after `data_path`. figures: dict name -> matplotlib Figure;
+        tables: dict name -> list of dicts (one per row). Returns the folder.
+        """
+        def fmt(v):                     # nested: a cell-private helper would not be
+            if isinstance(v, float):    # visible when this function is called from
+                return f"{v:.4g}"       # another cell
+            if isinstance(v, (tuple, list)):
+                return "[" + ", ".join(fmt(x) for x in v) + "]"
+            return str(v)
+
+        folder = os.path.splitext(data_path)[0]
+        os.makedirs(folder, exist_ok=True)
+        lines = [f"# {title}", "",
+                 f"Data file: `{os.path.basename(data_path)}`  ",
+                 f"Exported: {datetime.datetime.now().isoformat(timespec='seconds')}", ""]
+        if notes:
+            lines += [notes, ""]
+        for name, rows in tables.items():
+            path = os.path.join(folder, f"{name}.csv")
+            cols = list(dict.fromkeys(k for r in rows for k in r))
+            with open(path, "w", newline="") as fh:
+                w = csv.DictWriter(fh, fieldnames=cols)
+                w.writeheader()
+                for r in rows:
+                    w.writerow({k: r.get(k, "") for k in cols})
+            lines += [f"## Table: {name}", "", f"[{name}.csv]({name}.csv) — {len(rows)} rows", ""]
+            if rows and len(rows) <= 40:
+                lines += ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+                lines += ["| " + " | ".join(fmt(r.get(k, "")) for k in cols) + " |" for r in rows]
+                lines.append("")
+        for name, fig in figures.items():
+            fig.savefig(os.path.join(folder, f"{name}.png"), dpi=200, bbox_inches="tight")
+            fig.savefig(os.path.join(folder, f"{name}.pdf"), bbox_inches="tight")
+            # do NOT plt.close(fig): inside marimo a closed figure no longer displays
+            lines += [f"## Figure: {name}", "", f"![{name}]({name}.png)  ",
+                      f"Vector version: [{name}.pdf]({name}.pdf)", ""]
+        with open(os.path.join(folder, "report.md"), "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lines))
+        return folder
+
+    def metrics_rows(results, **extra):
+        """Metrics dict -> CSV rows (per-shot samples left out)."""
+        rows = []
+        for name, m in results.items():
+            r = dict(extra, policy=name, shots=m.shots, failures=m.failures, ler=m.ler,
+                     ci_low=m.ci_low, ci_high=m.ci_high, escalation_rate=m.escalation_rate,
+                     silent_failures=m.silent_failures,
+                     unconverged_failures=m.unconverged_failures,
+                     escalated_failures=m.escalated_failures, work_mean=m.work_mean,
+                     work_p99=m.work_p99, time_p50_us=m.time_p50_us, time_p99_us=m.time_p99_us)
+            rows.append(r)
+        return rows
+
+    return export_bundle, metrics_rows
+
+
+@app.cell
+def _(
+    BB_PRESETS,
+    ExperimentConfig,
+    Metrics,
+    RESULTS_DIR,
+    bb_from_preset,
+    build_memory_circuit,
+    csv,
+    dem_to_matrices,
+    dz,
+    export_bundle,
+    load_results,
+    metrics_rows,
+    mo,
+    np,
+    os,
+    plot_latency,
+    plt,
+    render_checks,
+    run_checks,
+    save_results,
+):
+    import tempfile as _tempfile
+
+    def _tmpdir():
+        return _tempfile.mkdtemp()
+
+    def _results_dir_absolute():
+        assert os.path.isabs(RESULTS_DIR) and os.path.isdir(RESULTS_DIR)
+        here = mo.notebook_dir()
+        if here is not None:
+            assert os.path.dirname(RESULTS_DIR) == os.path.abspath(str(here)), \
+                "results must live next to the notebook, not wherever marimo was launched"
+
+    def _bundle_written():
+        data = os.path.join(_tmpdir(), "E1_demo.json")
+        open(data, "w").write("{}")
+        fig, ax = plt.subplots()
+        ax.plot([1, 2, 3])
+        m = Metrics(100, 3, 0.03, 0.01, 0.08, 0.4, 2.0, 5.0, 10.0, 50.0, 1, 0)
+        folder = export_bundle(data, "demo", {"curve": fig}, {"metrics": metrics_rows({"always": m})})
+        assert folder == os.path.splitext(data)[0]
+        for f in ("curve.png", "curve.pdf", "metrics.csv", "report.md"):
+            assert os.path.getsize(os.path.join(folder, f)) > 0, f"{f} missing or empty"
+        rows = list(csv.DictReader(open(os.path.join(folder, "metrics.csv"))))
+        assert len(rows) == 1 and rows[0]["policy"] == "always" and rows[0]["failures"] == "3"
+        report = open(os.path.join(folder, "report.md"), encoding="utf-8").read()
+        assert "curve.png" in report and "metrics.csv" in report
+
+    def _figures_still_display():
+        fig, ax = plt.subplots()
+        ax.plot([0, 1])
+        data = os.path.join(_tmpdir(), "x.json")
+        open(data, "w").write("{}")
+        export_bundle(data, "x", {"f": fig}, {})
+        # a figure closed by pyplot does not display in marimo, so export must leave it open
+        assert plt.fignum_exists(fig.number), "export closed the figure, so it will not display"
+        import io
+        fig.savefig(io.BytesIO(), format="png")
+
+    def _e1_reload_keeps_latency():
+        rng = np.random.default_rng(1)
+        t = rng.lognormal(3, 0.5, 50)
+        smp = dict(time_us=t, work=np.ones(50), failed=np.zeros(50, bool),
+                   escalated=np.zeros(50, bool), converged=np.ones(50, bool))
+        m = Metrics(50, 0, 0.0, 0.0, 0.07, 0.0, 1.0, 1.0, float(np.median(t)),
+                    float(np.percentile(t, 99)), samples=smp)
+        p = os.path.join(_tmpdir(), "E1_x.json")
+        save_results(p, ExperimentConfig(shots=50), {"never": m}, include_samples=True)
+        _, back = load_results(p)
+        plot_latency(back)                            # needs the per-shot samples
+
+    def _interrupted_run_resumes():
+        code = bb_from_preset("[[72, 12, 6]]", BB_PRESETS)
+        circ = build_memory_circuit(code, 2, 2e-3, use_flags=True)
+        H, L, pr = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
+        det, obs = circ.compile_detector_sampler(seed=5).sample(60, separate_observables=True)
+        ck = os.path.join(_tmpdir(), "ck")
+        names = ["peel", "OSD-0"]
+        full, _ = dz.run_zoo(H, L, pr, det, obs, names, chunk_size=20, checkpoint_dir=ck)
+        os.remove(os.path.join(ck, "chunk_000000020.npz"))       # the run "died" here
+        again, backend = dz.run_zoo(H, L, pr, det, obs, names, chunk_size=20, checkpoint_dir=ck)
+        assert "resumed 2/3" in backend, backend
+        for n in names:
+            for k in ("conv", "fail", "work"):
+                assert np.array_equal(full[n][k], again[n][k]), f"{n}.{k} changed on resume"
+        _, other = dz.run_zoo(H, L, pr, det, obs, ["peel"], chunk_size=20, checkpoint_dir=ck)
+        assert "resumed" not in other, "chunks from a different decoder list were reused"
+
+    tests_export = run_checks([
+        ("results folder is absolute and next to the notebook", _results_dir_absolute),
+        ("export writes PNG, PDF, CSV and report.md", _bundle_written),
+        ("figures still display after being exported", _figures_still_display),
+        ("a reloaded E1 run keeps its per-shot samples", _e1_reload_keeps_latency),
+        ("an interrupted E3 run resumes with identical results", _interrupted_run_resumes),
+    ])
+    mo.vstack([render_checks("export & resume", tests_export),
+               mo.md(f"Results folder: `{RESULTS_DIR}`")])
+    return (tests_export,)
 
 
 @app.cell
@@ -2287,18 +2516,22 @@ def _(
     tests_decoders,
     tests_dem,
     tests_experiments,
+    tests_export,
     tests_gb,
     tests_gf2,
     tests_repro,
     tests_stats,
     tests_switch,
+    tests_zoo,
 ):
     _sections = [
         ("2. GF(2)", tests_gf2), ("3. BB codes", tests_codes), ("3. GB codes", tests_gb),
         ("4. Circuit", tests_circuit), ("5. DEM", tests_dem),
         ("6. Decoders", tests_decoders), ("7. Switch policies", tests_switch),
         ("8. Statistics", tests_stats), ("9. Reproducibility", tests_repro),
+        ("9b. Export & resume", tests_export),
         ("11. Experiment drivers", tests_experiments),
+        ("11b. Decoder zoo", tests_zoo),
     ]
     _rows = ["| section | " + " | ".join(STATUS_ICON.values()) + " |",
              "|:--|--:|--:|--:|"]
@@ -2336,20 +2569,27 @@ def _(
     BB_PRESETS,
     GB_PRESETS,
     mo,
+    os,
 ):
     ui_code = mo.ui.dropdown(list(BB_PRESETS) + list(GB_PRESETS), value="[[72, 12, 6]]",
                              label="Code")
     ui_rounds = mo.ui.slider(1, 12, value=6, label="Rounds T")
     ui_p = mo.ui.dropdown(["5e-4", "1e-3", "2e-3", "3e-3", "5e-3"], value="1e-3", label="p")
-    ui_shots = mo.ui.slider(100, 5000, step=100, value=500, label="Shots")
+    ui_shots = mo.ui.slider(100, 200_000, step=100, value=500, label="Shots")
     ui_flags = mo.ui.switch(value=True, label="Flag qubits")
     ui_osd = mo.ui.slider(0, 4, value=0, label="OSD order")
     ui_seed = mo.ui.number(value=20260921, label="Seed")
+    _cores = os.cpu_count() or 1
+    ui_workers = mo.ui.slider(1, max(2, _cores), value=min(12, max(1, _cores - 4)),
+                              label=f"CPU workers (of {_cores})")
     mo.vstack([mo.md("### Experiment configuration"),
                mo.hstack([ui_code, ui_p, ui_flags]),
                mo.hstack([ui_rounds, ui_shots]),
-               mo.hstack([ui_osd, ui_seed])])
-    return ui_code, ui_flags, ui_osd, ui_p, ui_rounds, ui_seed, ui_shots
+               mo.hstack([ui_osd, ui_seed]),
+               ui_workers,
+               mo.md("*Decoding runs in parallel from about 2,000 shots upward; below that "
+                     "the per-process setup costs more than it saves.*")])
+    return ui_code, ui_flags, ui_osd, ui_p, ui_rounds, ui_seed, ui_shots, ui_workers
 
 
 @app.cell
@@ -2362,32 +2602,34 @@ def _(
     ui_rounds,
     ui_seed,
     ui_shots,
+    ui_workers,
 ):
     config = ExperimentConfig(
         code=ui_code.value, rounds=int(ui_rounds.value), p=float(ui_p.value),
         shots=int(ui_shots.value), seed=int(ui_seed.value),
-        use_flags=bool(ui_flags.value), osd_order=int(ui_osd.value))
+        use_flags=bool(ui_flags.value), osd_order=int(ui_osd.value),
+        workers=int(ui_workers.value))
     return (config,)
 
 
 @app.cell
 def _(
     BB_PRESETS,
-    BpOsdDecoder,
     GB_PRESETS,
-    PeelingDecoder,
-    SwitchPolicy,
-    TRIGGERS,
+    Metrics,
+    RESULTS_DIR,
     bb_from_preset,
     build_memory_circuit,
+    code_from_key,
     dem_to_matrices,
+    dz,
     flag_detector_mask,
     gb_from_preset,
     mo,
-    run_benchmark,
+    np,
+    os,
+    wilson,
 ):
-    _FLAG_ONLY = ("flag", "flag_or_fail")
-
     def code_from_key(key):
         """Build any preset, BB or GB, from its label."""
         if key in BB_PRESETS:
@@ -2396,25 +2638,55 @@ def _(
             return gb_from_preset(key, GB_PRESETS)
         raise KeyError(f"unknown code {key!r}")
 
-    def run_ablation(config, keep_samples=True):
+    def run_ablation(config, keep_samples=True, on_chunk=None):
         """
-        E1. Build the code, circuit and DEM from `config`; construct one
-        SwitchPolicy per trigger over a shared PeelingDecoder / BpOsdDecoder pair
-        (skip flag triggers when config.use_flags is False); run_benchmark.
+        E1. Decode every shot ONCE with the weak decoder (peeling) and once with the
+        strong one (BP+OSD at config.osd_order), then derive one policy per trigger.
+        This matches running SwitchPolicy on every shot -- the decoder-zoo tests
+        check that shot by shot -- but it uses config.workers CPU processes and
+        never decodes the same shot twice.
 
-        Returns dict trigger -> Metrics. Per-shot samples are kept by default so
-        the latency graph can be drawn.
+        Returns dict trigger -> Metrics.
         """
         code = code_from_key(config.code)
         circuit = build_memory_circuit(code, config.rounds, config.p, use_flags=config.use_flags)
         H, L, priors = dem_to_matrices(circuit.detector_error_model(decompose_errors=False))
         mask = flag_detector_mask(code, config.rounds, config.use_flags, circuit.num_detectors)
-        primary = PeelingDecoder(H, priors)
-        secondary = BpOsdDecoder(H, priors, osd_order=config.osd_order)
-        policies = {t: SwitchPolicy(primary, secondary, t, mask)
-                    for t in TRIGGERS if config.use_flags or t not in _FLAG_ONLY}
-        return run_benchmark(circuit, policies, L, config.shots, config.seed,
-                             keep_samples=keep_samples)
+        det, obs = circuit.compile_detector_sampler(seed=config.seed).sample(
+            config.shots, separate_observables=True)
+
+        names = [("weak", {"kind": "peel"}),
+                 ("strong", {"kind": "osd", "osd_order": config.osd_order, "max_iter": 20})]
+        workers = dz.parallel_workers(config.shots, config.workers)
+        results, _backend = dz.run_zoo(H, L, priors, det, obs, names, workers=workers,
+                                       chunk_size=dz.chunk_for(config.shots, workers),
+                                       on_chunk=on_chunk)
+        W, S = results["weak"], results["strong"]
+
+        n_flags = det[:, mask].sum(1) if mask.any() else np.zeros(config.shots, dtype=int)
+        none = np.zeros(config.shots, bool)
+        triggers = {"never": (none, False), "always": (np.ones(config.shots, bool), False),
+                    "primary_fail": (none, True)}
+        if config.use_flags:
+            triggers["flag"] = (n_flags > 0, True)
+            triggers["flag_or_fail"] = (n_flags > 0, True)
+
+        out = {}
+        for name, (pre, fallback) in triggers.items():
+            P = dz.derive(W, S, pre, fallback)
+            k = int(P["fail"].sum())
+            ler, lo, hi = wilson(k, config.shots)
+            out[name] = Metrics(
+                shots=config.shots, failures=k, ler=ler, ci_low=lo, ci_high=hi,
+                escalation_rate=float(P["esc"].mean()), work_mean=float(P["work"].mean()),
+                work_p99=float(np.percentile(P["work"], 99)),
+                time_p50_us=float(np.percentile(P["cost"], 50)),
+                time_p99_us=float(np.percentile(P["cost"], 99)),
+                silent_failures=int(P["silent"].sum()),
+                unconverged_failures=int(P["unconverged"].sum()),
+                samples=(dict(time_us=P["cost"], work=P["work"], failed=P["fail"],
+                              escalated=P["esc"], converged=W["conv"]) if keep_samples else None))
+        return out
 
     def run_sweep(config, ps, keep_samples=False, progress=True):
         """E2. run_ablation at each p in `ps`. Returns dict p -> (dict trigger -> Metrics)."""
@@ -2427,21 +2699,25 @@ def _(
     def result_path(kind, config):
         """Deterministic file name: the same config always maps to the same file."""
         tag = config.code.strip("[]").replace(", ", "-").replace(" ", "")
-        return (f"results/{kind}_{tag}_T{config.rounds}_p{config.p:g}_"
-                f"{config.shots}shots_seed{config.seed}"
-                f"{'_flags' if config.use_flags else ''}_osd{config.osd_order}.json")
+        return os.path.join(RESULTS_DIR, f"{kind}_{tag}_T{config.rounds}_p{config.p:g}_"
+                            f"{config.shots}shots_seed{config.seed}"
+                            f"{'_flags' if config.use_flags else ''}_osd{config.osd_order}.json")
 
     return code_from_key, result_path, run_ablation, run_sweep
 @app.cell
 def _(
+    BB_PRESETS,
     ExperimentConfig,
     TRIGGERS,
+    bb_from_preset,
     code_from_key,
+    reference_fault_count,
     render_checks,
     result_path,
     run_ablation,
     run_checks,
     run_sweep,
+    validation_run,
 ):
     _small = ExperimentConfig(code="[[72, 12, 6]]", rounds=2, p=2e-3, shots=20, seed=3)
 
@@ -2474,7 +2750,27 @@ def _(
             "different configs must not share a file"
         assert code_from_key("[[48, 6, 8]]").n == 48
 
+    def _reference_formula():
+        code = bb_from_preset("[[72, 12, 6]]", BB_PRESETS)
+        # n(wT + T/2 + 1) with n = 72, w = 3 (qubit degree), T = 4 -> 72 * 15 = 1080
+        assert reference_fault_count(code, 4) == 1080, reference_fault_count(code, 4)
+
+    def _validation_runs():
+        import dataclasses
+        cfg = dataclasses.replace(_small, rounds=2, shots=40)
+        v = validation_run(cfg, target=0.5)
+        assert v["v1"]["our_faults"] > v["v1"]["our_faults_unflagged"] > 0, \
+            "a flagged circuit must have more fault mechanisms"
+        assert v["v1"]["ratio"] > 0
+        lo, hi = v["v2"]["ci_low"], v["v2"]["ci_high"]
+        assert v["v2"]["agrees"] == (lo <= 0.5 <= hi), "agreement must follow the interval"
+        assert v["v3"]["effect"] in ("flags improve accuracy", "flags cost accuracy",
+                                     "no resolvable difference")
+        assert v["v3"]["extra_detectors"] > 0 and 0.0 <= v["v3"]["flagged_fraction"] <= 1.0
+
     tests_experiments = run_checks([
+        ("reference fault-count formula n(wT + T/2 + 1)", _reference_formula),
+        ("E0 validation runs and reports V1, V2, V3", _validation_runs),
         ("run_ablation returns every trigger, with sane escalation", _ablation_triggers),
         ("flag triggers are skipped when flags are off", _no_flags),
         ("run_ablation works on a GB code", _gb_code),
@@ -2494,72 +2790,1357 @@ def _(mo):
 
 
 @app.cell
+def _(config, core_ready, mo, result_path, run_ablation, run_e1, save_results):
+    # Always define e1_run (None when not run), so the view cell can use either
+    # a fresh run or a loaded one.
+    e1_run = None
+    if not core_ready:
+        _out = mo.md("*E1 locked: finish the implementation (see §10).*")
+    elif not run_e1.value:
+        _out = mo.md("*Press **Run E1** to start, or load a previous run below.*")
+    else:
+        _res = run_ablation(config)
+        _path = save_results(result_path("E1", config), config, _res, include_samples=True)
+        e1_run = dict(config=config, results=_res, path=_path)
+        _out = mo.md(f"E1 finished. Saved to `{_path}`.")
+    _out
+    return (e1_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, e1_run, glob, mo, os):
+    _ = e1_run                                    # refresh the list after a new run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "E1_*.json")))
+    ui_e1_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+                                value=os.path.basename(_files[-1]) if _files else None,
+                                label="Previous E1 run")
+    load_e1_btn = mo.ui.run_button(label="Load E1")
+    mo.hstack([ui_e1_file, load_e1_btn]) if _files else mo.md("*No saved E1 runs yet.*")
+    return load_e1_btn, ui_e1_file
+
+
+@app.cell
+def _(load_e1_btn, load_results, ui_e1_file):
+    e1_loaded = None
+    if load_e1_btn.value and ui_e1_file.value:
+        _cfg, _res = load_results(ui_e1_file.value)
+        e1_loaded = dict(config=_cfg, results=_res, path=ui_e1_file.value)
+    return (e1_loaded,)
+
+
+@app.cell
 def _(
-    config,
-    core_ready,
+    e1_loaded,
+    e1_run,
+    export_bundle,
+    metrics_rows,
     mo,
     plot_ablation,
     plot_latency,
     plot_outcomes,
     plot_tradeoff,
-    result_path,
-    run_ablation,
-    run_e1,
-    save_results,
 ):
-    mo.stop(not core_ready, mo.md("*E1 locked: finish the implementation (see §10).*"))
-    mo.stop(not run_e1.value, mo.md("*Press **Run E1** to start.*"))
-
-    e1_results = run_ablation(config)
-    e1_path = save_results(result_path("E1", config), config, e1_results)
-
-    _always = e1_results.get("always")
-    _suspicious = [t for t, m in e1_results.items()
-                   if _always is not None and t != "always" and m.ci_high < _always.ci_low]
+    _e1 = e1_run if e1_run is not None else e1_loaded
+    mo.stop(_e1 is None)
+    _cfg, _res = _e1["config"], _e1["results"]
+    _always = _res.get("always")
+    _beats = [t for t, m in _res.items()
+              if _always is not None and t != "always" and m.ci_high < _always.ci_low]
     _table = "\n".join(
         ["| trigger | LER | 95% CI | escalated | silent failures | work (mean) | p99 time |",
          "|:--|--:|:--|--:|--:|--:|--:|"]
         + [f"| `{t}` | {m.ler:.4f} | [{m.ci_low:.4f}, {m.ci_high:.4f}] | "
            f"{m.escalation_rate:.1%} | {m.silent_failures} | {m.work_mean:.1f} | "
-           f"{m.time_p99_us:.0f} µs |"
-           for t, m in e1_results.items()])
+           f"{m.time_p99_us:.0f} µs |" for t, m in _res.items()])
+    _figs = {"ablation": plot_ablation(_res), "outcomes": plot_outcomes(_res),
+             "tradeoff": plot_tradeoff(_res)}
+    if all(m.samples is not None for m in _res.values()):
+        _figs["latency"] = plot_latency(_res)
+    _title = f"E1 — {_cfg.code}, T={_cfg.rounds}, p={_cfg.p}, {_cfg.shots} shots"
+    _folder = export_bundle(_e1["path"], _title, dict(_figs),
+                            {"metrics": metrics_rows(_res, **vars(_cfg))})
     mo.vstack([
-        mo.md(f"### E1 — {config.code}, T={config.rounds}, p={config.p}, {config.shots} shots"),
+        mo.md(f"### {_title}"),
         mo.md(_table),
-        mo.md("> ⚠️ " + ", ".join(_suspicious) + " beat `always` — suspect a bug, "
-              "not a result.") if _suspicious else mo.md(""),
-        mo.md(f"Saved to `{e1_path}`. *Wall-clock times compare pure-Python peeling "
-              "with compiled BP+OSD; use `work` or a compiled peeler for latency claims.*"),
-        plot_ablation(e1_results),
-        plot_outcomes(e1_results),
-        plot_latency(e1_results),
-        plot_tradeoff(e1_results),
+        mo.md("> ℹ️ " + ", ".join(_beats) + " beat `always`. This is possible when the weak "
+              "decoder is right where the strong one errs — confirm it with a paired test on "
+              "the same shots (E3) before reporting it.") if _beats else mo.md(""),
+        mo.md(f"Data: `{_e1['path']}` · **Exported** figures (PNG + PDF), CSV and report to "
+              f"`{_folder}`"),
+        *[_f for _f in _figs.values()],
     ])
-    return (e1_results,)
+    return
+
+
+@app.cell
+def _(config, core_ready, mo, np, result_path, run_e2, run_sweep, save_sweep):
+    e2_run = None
+    if not core_ready:
+        _out = mo.md("*E2 locked: finish the implementation (see §10).*")
+    elif not run_e2.value:
+        _out = mo.md("*Press **Run E2** to start, or load a previous run below.*")
+    else:
+        _ps = np.logspace(np.log10(5e-4), np.log10(6e-3), 6)
+        _sweep = run_sweep(config, _ps)
+        _path = save_sweep(result_path("E2", config), config, _sweep)
+        e2_run = dict(config=config, sweep=_sweep, path=_path)
+        _out = mo.md(f"E2 finished. Saved to `{_path}`.")
+    _out
+    return (e2_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, e2_run, glob, mo, os):
+    _ = e2_run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "E2_*.json")))
+    ui_e2_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+                                value=os.path.basename(_files[-1]) if _files else None,
+                                label="Previous E2 run")
+    load_e2_btn = mo.ui.run_button(label="Load E2")
+    mo.hstack([ui_e2_file, load_e2_btn]) if _files else mo.md("*No saved E2 runs yet.*")
+    return load_e2_btn, ui_e2_file
+
+
+@app.cell
+def _(load_e2_btn, load_sweep, ui_e2_file):
+    e2_loaded = None
+    if load_e2_btn.value and ui_e2_file.value:
+        _cfg, _sweep = load_sweep(ui_e2_file.value)
+        e2_loaded = dict(config=_cfg, sweep=_sweep, path=ui_e2_file.value)
+    return (e2_loaded,)
+
+
+@app.cell
+def _(e2_loaded, e2_run, export_bundle, metrics_rows, mo, plot_sweep):
+    _e2 = e2_run if e2_run is not None else e2_loaded
+    mo.stop(_e2 is None)
+    _cfg, _sweep = _e2["config"], _e2["sweep"]
+    _rows = [r for _p, _res in _sweep.items() for r in metrics_rows(_res, p=_p)]
+    _fig = plot_sweep(_sweep)
+    _title = f"E2 — {_cfg.code}, T={_cfg.rounds}, {_cfg.shots} shots/point"
+    _folder = export_bundle(_e2["path"], _title, {"sweep": plot_sweep(_sweep)},
+                            {"sweep_metrics": _rows})
+    mo.vstack([mo.md(f"### {_title}"),
+               mo.md(f"Data: `{_e2['path']}` · **Exported** to `{_folder}`"), _fig])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11a. E0 — validation, and what the flags cost
+
+    A negative result is only believable if the setup could have found the effect.
+    E0 is the evidence for that, and it runs before any conclusion is drawn.
+
+    **V1 — how big is our fault model?** Pakhunov (2026) gives the number of DEM
+    fault mechanisms for a BB memory as $n(wT + T/2 + 1)$ under his noise model.
+    Ours uses full two-qubit depolarising noise, so it is denser. This check
+    reports the ratio, which tells you how far the two models are apart and
+    therefore how much of a published number you should expect to reproduce.
+
+    **V2 — do we reproduce a published number?** Enter a literature figure (for
+    example, peeling resolving 93.5% of shots on [[72, 12, 6]] at $p=10^{-3}$,
+    $T=12$) and this reports ours with a 95% interval and whether the two agree.
+    A disagreement is informative, not fatal: with V1 in hand you can say *why*.
+
+    **V3 — what do the flags cost?** Flag qubits add ancillas and CNOTs, so they
+    add noise. This decodes the same configuration with and without flags using
+    the same strong decoder and compares the logical error rates. If flags make
+    accuracy worse, a flag trigger has to buy back that loss before it can help.
+
+    *Important:* this section does not reimplement anyone else's noise model. It
+    measures the distance between ours and a published reference, which is what a
+    reader needs in order to weigh the rest of the thesis.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    ui_v2_target = mo.ui.number(0.0, 1.0, value=0.935, step=0.001,
+                                label="Literature target: fraction of shots the weak decoder resolves")
+    ui_v2_source = mo.ui.text(value="Pakhunov (2026), Table II, [[72,12,6]], p=1e-3, T=12",
+                              label="Source", full_width=True)
+    run_e0 = mo.ui.run_button(label="Run E0 — validation")
+    mo.vstack([mo.hstack([ui_v2_target, run_e0]), ui_v2_source,
+               mo.md("*Uses the E1 configuration above (code, T, p, shots, workers). "
+                     "Set T and p to match the source you are comparing against.*")])
+    return run_e0, ui_v2_source, ui_v2_target
+
+
+@app.cell
+def _(build_memory_circuit, code_from_key, dem_to_matrices, dz, flag_detector_mask, np, wilson):
+    def reference_fault_count(code, rounds):
+        """Pakhunov's count for a BB memory: n(wT + T/2 + 1), w = qubit degree."""
+        w = int(np.asarray(code.hx.sum(axis=0)).max())
+        return int(code.n * (w * rounds + rounds / 2 + 1))
+
+    def validation_run(config, target, on_chunk=None):
+        """V1, V2 and V3 on one configuration. Returns a dict of plain numbers."""
+        code = code_from_key(config.code)
+        out = {"code": config.code, "rounds": config.rounds, "p": config.p,
+               "shots": config.shots, "target": float(target)}
+        arms = {}
+        for flags in (True, False):
+            circ = build_memory_circuit(code, config.rounds, config.p, use_flags=flags)
+            H, L, pr = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
+            det, obs = circ.compile_detector_sampler(seed=config.seed).sample(
+                config.shots, separate_observables=True)
+            names = [("weak", {"kind": "peel"}),
+                     ("strong", {"kind": "osd", "osd_order": config.osd_order, "max_iter": 20})]
+            workers = dz.parallel_workers(config.shots, config.workers)
+            res, _ = dz.run_zoo(H, L, pr, det, obs, names, workers=workers,
+                                chunk_size=dz.chunk_for(config.shots, workers),
+                                on_chunk=on_chunk)
+            mask = flag_detector_mask(code, config.rounds, flags, circ.num_detectors)
+            arms[flags] = dict(
+                faults=H.shape[1], detectors=circ.num_detectors,
+                flagged_fraction=float((det[:, mask].sum(1) > 0).mean()) if flags else 0.0,
+                weak_resolved=wilson(int(res["weak"]["conv"].sum()), config.shots),
+                weak_ler=wilson(int(res["weak"]["fail"].sum()), config.shots),
+                strong_ler=wilson(int(res["strong"]["fail"].sum()), config.shots),
+                silent=int((res["weak"]["conv"] & res["weak"]["fail"]).sum()))
+
+        # V1: how dense is our fault model compared with the reference formula?
+        ref = reference_fault_count(code, config.rounds)
+        out["v1"] = dict(reference_faults=ref, our_faults=arms[True]["faults"],
+                         our_faults_unflagged=arms[False]["faults"],
+                         ratio=arms[False]["faults"] / ref)
+        # V2: do we reproduce the published figure?
+        rate, lo, hi = arms[True]["weak_resolved"]
+        out["v2"] = dict(measured=rate, ci_low=lo, ci_high=hi, target=float(target),
+                         agrees=bool(lo <= target <= hi),
+                         measured_unflagged=arms[False]["weak_resolved"][0])
+        # V3: the cost of the flags (independent samples: different circuits)
+        f, uf = arms[True]["strong_ler"], arms[False]["strong_ler"]
+        if f[2] < uf[1]:
+            effect = "flags improve accuracy"
+        elif f[1] > uf[2]:
+            effect = "flags cost accuracy"
+        else:
+            effect = "no resolvable difference"
+        out["v3"] = dict(ler_flagged=f, ler_unflagged=uf, effect=effect,
+                         extra_faults=arms[True]["faults"] - arms[False]["faults"],
+                         extra_detectors=arms[True]["detectors"] - arms[False]["detectors"],
+                         flagged_fraction=arms[True]["flagged_fraction"],
+                         silent_flagged=arms[True]["silent"], silent_unflagged=arms[False]["silent"])
+        return out
+
+    return reference_fault_count, validation_run
+
+
+@app.cell
+def _(config, core_ready, mo, run_e0, ui_v2_target, validation_run):
+    e0_result = None
+    if not core_ready:
+        _out = mo.md("*E0 locked until every test passes.*")
+    elif not run_e0.value:
+        _out = mo.md("*Press **Run E0** to validate this configuration.*")
+    else:
+        _n_chunks = max(1, 2 * (-(-config.shots // 250)))
+        with mo.status.progress_bar(total=_n_chunks, title="E0: validating", show_eta=True) as _bar:
+            e0_result = validation_run(config, ui_v2_target.value, on_chunk=_bar.update)
+        _out = mo.md("E0 finished.")
+    _out
+    return (e0_result,)
+
+
+@app.cell
+def _(RESULTS_DIR, e0_result, glob, mo, os, v4_result):
+    _ = (e0_result, v4_result)               # re-list after a new run
+
+    def _picker(prefix, label):
+        files = sorted(glob.glob(os.path.join(RESULTS_DIR, f"{prefix}_*.json")))
+        return mo.ui.dropdown({os.path.basename(f): f for f in files},
+                              value=os.path.basename(files[-1]) if files else None,
+                              label=label), files
+
+    ui_e0_file, _f0 = _picker("E0", "Saved E0 run")
+    ui_v4_file, _f4 = _picker("V4", "Saved V4 run")
+    ui_v5_file, _f5 = _picker("V5", "Saved V5 run")
+    load_e0_btn = mo.ui.run_button(label="Load E0")
+    load_v4_btn = mo.ui.run_button(label="Load V4")
+    load_v5_btn = mo.ui.run_button(label="Load V5")
+    mo.vstack([mo.md("#### Load a saved validation run"),
+               mo.hstack([ui_e0_file, load_e0_btn]) if _f0 else mo.md("*No saved E0 runs yet.*"),
+               mo.hstack([ui_v4_file, load_v4_btn]) if _f4 else mo.md("*No saved V4 runs yet.*"),
+               mo.hstack([ui_v5_file, load_v5_btn]) if _f5 else mo.md("*No saved V5 runs yet.*")])
+    return (
+        load_e0_btn,
+        load_v4_btn,
+        load_v5_btn,
+        ui_e0_file,
+        ui_v4_file,
+        ui_v5_file,
+    )
+
+
+@app.cell
+def _(load_e0_btn, load_v4_btn, load_v5_btn, read_result_file, ui_e0_file, ui_v4_file, ui_v5_file):
+    # Each loader returns None until its button is pressed, so the display cells can
+    # take whichever of (fresh run, loaded file) exists.
+    e0_loaded = v4_loaded = v5_loaded = None
+    if load_e0_btn.value and ui_e0_file.value:
+        _d = read_result_file(ui_e0_file.value, "validation")
+        e0_loaded = dict(_d["config"], path=ui_e0_file.value, source=_d.get("source", ""),
+                         **_d["checks"])
+    if load_v4_btn.value and ui_v4_file.value:
+        _d = read_result_file(ui_v4_file.value, "validation")
+        v4_loaded = dict(_d["config"], path=ui_v4_file.value, arms=_d["checks"]["v4"])
+    if load_v5_btn.value and ui_v5_file.value:
+        _d = read_result_file(ui_v5_file.value, "validation")
+        v5_loaded = dict(_d["config"], path=ui_v5_file.value, rows=_d["checks"]["v5"])
+    return e0_loaded, v4_loaded, v5_loaded
 
 
 @app.cell
 def _(
+    RESULTS_DIR,
+    e0_loaded,
+    e0_result,
+    export_bundle,
+    mo,
+    os,
+    plt,
+    ui_v2_source,
+    write_result_file,
+):
+    e0_data = e0_result if e0_result is not None else e0_loaded
+    mo.stop(e0_data is None, mo.md("*Run E0, or load a saved run above.*"))
+    _v1, _v2, _v3 = e0_data["v1"], e0_data["v2"], e0_data["v3"]
+    _source = e0_data.get("source") or ui_v2_source.value
+
+    _fig, (_a, _b) = plt.subplots(1, 2, figsize=(11, 4.2))
+    _a.bar([0], [_v2["measured"]], color="#1f77b4", width=0.5)
+    _a.errorbar([0], [_v2["measured"]],
+                yerr=[[_v2["measured"] - _v2["ci_low"]], [_v2["ci_high"] - _v2["measured"]]],
+                fmt="none", color="k", capsize=6)
+    _a.axhline(_v2["target"], color="#d62728", ls="--", label=f"literature: {_v2['target']:.3f}")
+    _a.set_xticks([0], ["this notebook"])
+    _a.set_ylim(0, 1)
+    _a.set_ylabel("fraction of shots resolved by the weak decoder")
+    _a.set_title(f"V2 — {'agrees with' if _v2['agrees'] else 'differs from'} the published value")
+    _a.legend(fontsize=8)
+    for _i, (_lab, _m) in enumerate([("with flags", _v3["ler_flagged"]),
+                                     ("without flags", _v3["ler_unflagged"])]):
+        _b.errorbar([_i], [_m[0] if _m[0] > 0 else _m[2]],
+                    yerr=[[max(_m[0] - _m[1], 0)], [max(_m[2] - _m[0], 0)]],
+                    fmt="o" if _m[0] > 0 else "v", color="#2ca02c", capsize=6, ms=8)
+    _b.set_xticks([0, 1], ["with flags", "without flags"])
+    _b.set_yscale("log")
+    _b.set_xlim(-0.5, 1.5)
+    _b.set_ylabel("logical error rate (strong decoder)")
+    _b.set_title(f"V3 — {_v3['effect']}")
+    _b.grid(True, which="both", axis="y", alpha=0.3)
+    _fig.tight_layout()
+
+    _rows = [
+        dict(check="V1 fault-model density", value=f"{_v1['ratio']:.1f}×",
+             detail=f"{_v1['our_faults_unflagged']:,} faults vs {_v1['reference_faults']:,} "
+                    f"from n(wT + T/2 + 1)"),
+        dict(check="V2 reproduces literature",
+             value="yes" if _v2["agrees"] else "no",
+             detail=f"ours {_v2['measured']:.3f} [{_v2['ci_low']:.3f}, {_v2['ci_high']:.3f}] "
+                    f"vs {_v2['target']:.3f} ({_source})"),
+        dict(check="V3 cost of flags", value=_v3["effect"],
+             detail=f"LER {_v3['ler_flagged'][0]:.2e} with flags vs "
+                    f"{_v3['ler_unflagged'][0]:.2e} without; "
+                    f"+{_v3['extra_faults']:,} faults, +{_v3['extra_detectors']} detectors; "
+                    f"flags fire on {_v3['flagged_fraction']:.1%} of shots"),
+        dict(check="silent failures (weak decoder)",
+             value=f"{_v3['silent_flagged']} flagged / {_v3['silent_unflagged']} unflagged",
+             detail="the only failures a flag trigger could ever catch"),
+    ]
+    _tag = e0_data["code"].strip("[]").replace(", ", "-")
+    _path = write_result_file(
+        os.path.join(RESULTS_DIR, f"E0_{_tag}_T{e0_data['rounds']}_p{e0_data['p']:g}_"
+                                  f"{e0_data['shots']}shots.json"),
+        {"kind": "validation",
+         "config": {k: e0_data[k] for k in ("code", "rounds", "p", "shots", "target")},
+         "source": _source,
+         "checks": {k: e0_data[k] for k in ("v1", "v2", "v3")}})
+    _folder = export_bundle(_path, f"E0 validation — {e0_data['code']}, T={e0_data['rounds']}, "
+                            f"p={e0_data['p']}", {"validation": _fig}, {"checks": _rows},
+                            notes=f"Literature source: {ui_v2_source.value}")
+    mo.vstack([
+        mo.md("### E0 — validation results"),
+        mo.md("| check | verdict | detail |\n|:--|:--|:--|\n"
+              + "\n".join(f"| {r['check']} | {r['value']} | {r['detail']} |" for r in _rows)),
+        mo.md(f"Saved to `{_path}` · exported to `{_folder}`"),
+        _fig,
+    ])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### V4 — why do flags help? Hardening or information?
+
+    If E0's V3 shows flags improving accuracy, there are two possible reasons and
+    they mean very different things:
+
+    - **Circuit hardening.** The flag CNOTs shorten the window in which an ancilla
+      fault can spread, so fewer hook errors reach the data. This is the classic
+      flag-qubit mechanism (Chao & Reichardt).
+    - **Extra information.** The flagged circuit simply hands the decoder 432 more
+      detectors, and a decoder with more syndrome bits does better.
+
+    Three arms separate them, all decoded with the same strong decoder:
+
+    | arm | circuit | decoder sees |
+    |---|---|---|
+    | unflagged | no flag qubits | all detectors |
+    | flagged, blind | with flag qubits | flag detector rows **removed** from H |
+    | flagged, sighted | with flag qubits | all detectors |
+
+    Blind ≈ sighted means hardening. Blind ≈ unflagged means information. The
+    syndrome bits are removed from the decoding problem rather than zeroed: zeroing
+    would feed the decoder a syndrome that never occurred.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    run_v4 = mo.ui.run_button(label="Run V4 — hardening vs information")
+    run_v5 = mo.ui.run_button(label="Run V5 — flagged fraction vs rounds")
+    mo.hstack([run_v4, run_v5])
+    return run_v4, run_v5
+
+
+@app.cell
+def _(
+    build_memory_circuit,
+    code_from_key,
     config,
     core_ready,
+    dem_to_matrices,
+    dz,
+    flag_detector_mask,
     mo,
     np,
-    plot_sweep,
-    result_path,
-    run_e2,
-    run_sweep,
-    save_sweep,
+    run_v4,
+    wilson,
 ):
-    mo.stop(not core_ready, mo.md("*E2 locked: finish the implementation (see §10).*"))
-    mo.stop(not run_e2.value, mo.md("*Press **Run E2** to start.*"))
+    def _arm(H, L, priors, det, obs, workers):
+        names = [("strong", {"kind": "osd", "osd_order": config.osd_order, "max_iter": 20})]
+        res, _ = dz.run_zoo(H, L, priors, det, obs, names, workers=workers,
+                            chunk_size=dz.chunk_for(len(det), workers))
+        k = int(res["strong"]["fail"].sum())
+        return dict(failures=k, ler=wilson(k, len(det)), detectors=H.shape[0], faults=H.shape[1])
 
-    e2_ps = np.logspace(np.log10(5e-4), np.log10(6e-3), 6)
-    e2_sweep = run_sweep(config, e2_ps)
-    e2_path = save_sweep(result_path("E2", config), config, e2_sweep)
-    mo.vstack([mo.md(f"### E2 — {config.code}, T={config.rounds}, {config.shots} shots/point"),
-               mo.md(f"Saved to `{e2_path}`."),
-               plot_sweep(e2_sweep)])
-    return (e2_sweep,)
+    v4_result = None
+    if not core_ready:
+        _out = mo.md("*V4 locked until every test passes.*")
+    elif not run_v4.value:
+        _out = mo.md("*Press **Run V4** (uses the E1 configuration; about twice an E0 run).*")
+    else:
+        _code = code_from_key(config.code)
+        _workers = dz.parallel_workers(config.shots, config.workers)
+        _arms = {}
+        # unflagged circuit
+        _c0 = build_memory_circuit(_code, config.rounds, config.p, use_flags=False)
+        _H0, _L0, _p0 = dem_to_matrices(_c0.detector_error_model(decompose_errors=False))
+        _d0, _o0 = _c0.compile_detector_sampler(seed=config.seed).sample(
+            config.shots, separate_observables=True)
+        _arms["unflagged"] = _arm(_H0, _L0, _p0, _d0, _o0, _workers)
+        # flagged circuit, decoded with and without the flag detectors
+        _c1 = build_memory_circuit(_code, config.rounds, config.p, use_flags=True)
+        _H1, _L1, _p1 = dem_to_matrices(_c1.detector_error_model(decompose_errors=False))
+        _d1, _o1 = _c1.compile_detector_sampler(seed=config.seed).sample(
+            config.shots, separate_observables=True)
+        _mask = flag_detector_mask(_code, config.rounds, True, _c1.num_detectors)
+        _arms["flagged, sighted"] = _arm(_H1, _L1, _p1, _d1, _o1, _workers)
+        _keep = ~_mask
+        _arms["flagged, blind"] = _arm(_H1[_keep], _L1, _p1, _d1[:, _keep], _o1, _workers)
+        v4_result = dict(arms=_arms, shots=config.shots, code=config.code,
+                         rounds=config.rounds, p=config.p)
+        _out = mo.md("V4 finished.")
+    _out
+    return (v4_result,)
+
+
+@app.cell
+def _(RESULTS_DIR, export_bundle, mo, os, plt, v4_loaded, v4_result, write_result_file):
+    v4_data = v4_result if v4_result is not None else v4_loaded
+    mo.stop(v4_data is None, mo.md("*Run V4, or load a saved run above.*"))
+    _order = ["unflagged", "flagged, blind", "flagged, sighted"]
+    _a = v4_data["arms"]
+    _fig, _ax = plt.subplots(figsize=(7.5, 4.2))
+    for _i, _n in enumerate(_order):
+        _m = _a[_n]["ler"]
+        _ax.errorbar([_i], [_m[0] if _m[0] > 0 else _m[2]],
+                     yerr=[[max(_m[0] - _m[1], 0)], [max(_m[2] - _m[0], 0)]],
+                     fmt="o" if _m[0] > 0 else "v", ms=9, capsize=6, color="#1f77b4")
+        _ax.annotate(f"{_a[_n]['failures']} fails", (_i, _m[2]), textcoords="offset points",
+                     xytext=(0, 10), ha="center", fontsize=8)
+    _ax.set_xticks(range(3), _order)
+    _ax.set_yscale("log")
+    _ax.set_xlim(-0.5, 2.5)
+    _ax.set_ylabel("logical error rate (strong decoder)")
+    _ax.set_title(f"V4 — {v4_data['code']}, T={v4_data['rounds']}, "
+                  f"{v4_data['shots']:,} shots per arm")
+    _ax.grid(True, which="both", axis="y", alpha=0.3)
+    _fig.tight_layout()
+
+    # Which explanation do the numbers support? Compare the three intervals.
+    _u, _b, _s = (_a[n]["ler"] for n in _order)
+
+    def _overlap(x, y):
+        return not (x[2] < y[1] or y[2] < x[1])
+
+    def _better(x, y):            # x significantly lower (better) than y
+        return x[2] < y[1]
+
+    if _overlap(_b, _s) and _better(_b, _u):
+        _verdict = ("**Circuit hardening.** Blind decoding of the flagged circuit is as good as "
+                    "sighted and beats the unflagged circuit, so the flag CNOTs themselves reduce "
+                    "the damage; the flag outcomes add little.")
+    elif _overlap(_b, _u) and _better(_s, _b):
+        _verdict = ("**Extra information.** Blind decoding falls back to the unflagged rate, so the "
+                    "gain comes from the decoder reading the flag detectors, not from the circuit.")
+    elif _better(_u, _b) and _better(_s, _u):
+        _verdict = ("**Information, against a noisier circuit.** The flag qubits make the circuit "
+                    "worse — blind decoding is significantly poorer than no flags at all — but the "
+                    "flag outcomes more than pay that back when the decoder can read them. Flags "
+                    "here are decoder input, not circuit hardening.")
+    elif _better(_u, _b) and not _better(_s, _u):
+        _verdict = ("**Flags cost accuracy.** The extra flag circuitry adds more error than its "
+                    "outcomes recover, even with the decoder reading them.")
+    elif _overlap(_b, _u) and _overlap(_s, _u):
+        _verdict = "**Inconclusive** — the three arms overlap. Run more shots."
+    else:
+        _verdict = ("**Mixed.** Ordering: " + ", ".join(
+            f"{n} {_a[n]['ler'][0]:.2e}" for n in sorted(_order, key=lambda n: _a[n]["ler"][0]))
+            + ". Read the intervals in the table below.")
+    _rows = [dict(arm=n, failures=_a[n]["failures"], ler=_a[n]["ler"][0],
+                  ci_low=_a[n]["ler"][1], ci_high=_a[n]["ler"][2],
+                  detectors=_a[n]["detectors"], faults=_a[n]["faults"]) for n in _order]
+    _tag = v4_data["code"].strip("[]").replace(", ", "-")
+    _path = write_result_file(
+        os.path.join(RESULTS_DIR, f"V4_{_tag}_T{v4_data['rounds']}_p{v4_data['p']:g}_"
+                                  f"{v4_data['shots']}shots.json"),
+        {"kind": "validation", "config": {k: v4_data[k] for k in ("code", "rounds", "p", "shots")},
+         "checks": {"v4": {n: _a[n] for n in _order}}})
+    _folder = export_bundle(_path, f"V4 hardening vs information — {v4_data['code']}",
+                            {"v4_arms": _fig}, {"arms": _rows}, notes=_verdict)
+    mo.vstack([mo.md("### V4 — hardening or information?"), mo.md(_verdict),
+               mo.md("| arm | failures | LER | 95% CI | detectors |\n|:--|--:|--:|:--|--:|\n"
+                     + "\n".join(f"| {r['arm']} | {r['failures']} | {r['ler']:.3e} | "
+                                  f"[{r['ci_low']:.3e}, {r['ci_high']:.3e}] | {r['detectors']} |"
+                                  for r in _rows)),
+               mo.md(f"Saved to `{_path}` · exported to `{_folder}`"), _fig])
+    return
+
+
+@app.cell
+def _(
+    build_memory_circuit,
+    code_from_key,
+    config,
+    core_ready,
+    flag_detector_mask,
+    mo,
+    run_v5,
+):
+    v5_run = None
+    if core_ready and run_v5.value:
+        _code = code_from_key(config.code)
+        _rows = []
+        for _T in (3, 6, 12, 18, 24):
+            _circ = build_memory_circuit(_code, _T, config.p, use_flags=True)
+            _det = _circ.compile_detector_sampler(seed=config.seed).sample(2000)
+            _mask = flag_detector_mask(_code, _T, True, _circ.num_detectors)
+            _bits = _det[:, _mask]
+            _rows.append(dict(rounds=_T, flag_detectors=int(_mask.sum()),
+                              fraction_any_flag=float((_bits.sum(1) > 0).mean()),
+                              mean_flags_per_shot=float(_bits.sum(1).mean())))
+        v5_run = dict(code=config.code, p=config.p, shots=2000, rows=_rows)
+    mo.md("*Press **Run V5** — flag statistics only, no decoding, so it takes seconds.*"
+          if v5_run is None else "V5 finished.")
+    return (v5_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, export_bundle, mo, os, plt, v5_loaded, v5_run, write_result_file):
+    v5_data = v5_run if v5_run is not None else v5_loaded
+    mo.stop(v5_data is None, mo.md("*Run V5, or load a saved run above.*"))
+    _rows = v5_data["rows"]
+    _fig, (_a, _b) = plt.subplots(1, 2, figsize=(11, 4))
+    _Ts = [r["rounds"] for r in _rows]
+    _a.plot(_Ts, [r["fraction_any_flag"] for r in _rows], "o-", color="#d62728")
+    _a.axhline(1.0, color="k", lw=0.7, ls=":")
+    _a.set_ylim(0, 1.05)
+    _a.set_xlabel("syndrome rounds T")
+    _a.set_ylabel("fraction of shots with at least one flag")
+    _a.set_title("'Any flag fired' saturates with T")
+    _b.plot(_Ts, [r["mean_flags_per_shot"] for r in _rows], "s-", color="#1f77b4")
+    _b.set_xlabel("syndrome rounds T")
+    _b.set_ylabel("mean flag bits per shot")
+    _b.set_title("Flags fire in proportion to rounds")
+    for _ax in (_a, _b):
+        _ax.grid(True, alpha=0.3)
+    _fig.tight_layout()
+    _tag = v5_data["code"].strip("[]").replace(", ", "-")
+    _path = write_result_file(
+        os.path.join(RESULTS_DIR, f"V5_{_tag}_p{v5_data['p']:g}_flagrate.json"),
+        {"kind": "validation",
+         "config": dict(code=v5_data["code"], p=v5_data["p"], shots=v5_data["shots"]),
+         "checks": {"v5": _rows}})
+    _folder = export_bundle(_path, f"V5 flag rate vs rounds — {v5_data['code']}, p={v5_data['p']}",
+                            {"v5_flag_rate": _fig}, {"flag_rate": _rows},
+                            notes="A trigger that fires on nearly every shot cannot discriminate; "
+                                  "this is the mechanism behind a null result for flag triggering.")
+    mo.vstack([mo.md("### V5 — does the trigger saturate?"),
+               mo.md("| T | flag detectors | shots with any flag | mean flags per shot |\n"
+                     "|--:|--:|--:|--:|\n"
+                     + "\n".join(f"| {r['rounds']} | {r['flag_detectors']} | "
+                                  f"{r['fraction_any_flag']:.1%} | {r['mean_flags_per_shot']:.2f} |"
+                                  for r in _rows)),
+               mo.md(f"Saved to `{_path}` · exported to `{_folder}`"), _fig])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11b. E3 — Decoder zoo: is flag-triggered switching viable at all?
+
+    E1 tested one decoder pair. A flag trigger might still pay off with a
+    different weak decoder (one that fails silently, or costs more) or a
+    different strong decoder. E3 tests **every weak × strong pair** in a
+    catalogue, against eight trigger rules, on the same shots.
+
+    **Method.** Each shot is decoded *once* by every decoder. Each policy is
+    then derived from the weak decoder's result, the strong decoder's result
+    and the shot's flag bits, so the cost grows with the number of decoders,
+    not the number of policies. The tests below check that this derivation
+    reproduces `SwitchPolicy` exactly. Decoding runs on all your CPU cores,
+    and peeling is compiled with `numba`, so timings are comparable across
+    decoders.
+
+    **Trigger rules.** `primary_fail` (the baseline), `flag>=k` (escalate
+    before decoding if at least *k* flag bits fired, else on failure),
+    `rounds>=k` (flags in at least *k* rounds), and `flag-only` (flags and
+    nothing else).
+
+    **Verdict per pair.** *Viable: accuracy* if some flag rule fails
+    significantly less than `primary_fail` (paired exact test, p < 0.05).
+    *Viable: cost* if some flag rule fails on no more shots than `primary_fail`
+    and saves at least 5% of its measured time per shot. Otherwise *not viable*. A pair is
+    *inconclusive* while `primary_fail` has fewer than 20 failures: too few to
+    tell the rules apart, so run more shots.
+
+    **Two numbers that explain the verdict.**
+    *Headroom* is the number of the weak decoder's silent failures that the
+    strong decoder gets right; no flag rule can gain more accuracy than this.
+    *Break-even ratio* r\* is the weak/strong cost ratio above which a flag
+    rule becomes cheaper than `primary_fail`; it is hardware-independent.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    import sys as _sys
+    _here = mo.notebook_dir()
+    _here = str(_here) if _here is not None else "."
+    if _here not in _sys.path:
+        _sys.path.insert(0, _here)
+    import decoder_zoo as dz
+    return (dz,)
+
+
+@app.cell
+def _(
+    BB_PRESETS,
+    BpOsdDecoder,
+    DecodeResult,
+    ExperimentConfig,
+    PeelingDecoder,
+    SwitchPolicy,
+    bb_from_preset,
+    build_memory_circuit,
+    code_from_key,
+    dem_to_matrices,
+    dz,
+    flag_detector_mask,
+    mo,
+    np,
+    plot_zoo_breakeven,
+    plot_zoo_silent,
+    plot_zoo_tradeoffs,
+    plot_zoo_verdicts,
+    render_checks,
+    run_ablation,
+    run_benchmark,
+    run_checks,
+):
+    _code = bb_from_preset("[[72, 12, 6]]", BB_PRESETS)
+    _T = 3
+    _circ = build_memory_circuit(_code, _T, 2e-3, use_flags=True)
+    _H, _L, _pr = dem_to_matrices(_circ.detector_error_model(decompose_errors=False))
+    _mask = flag_detector_mask(_code, _T, True, _circ.num_detectors)
+    _det, _obs = _circ.compile_detector_sampler(seed=17).sample(90, separate_observables=True)
+    _det, _obs = _det.astype(np.uint8), _obs.astype(np.uint8)
+    _names = ["peel", "BP-ms-10", "OSD-0", "LSD-0"]
+    _state = {}
+
+    def _zoo():
+        if "res" not in _state:
+            _state["res"], _state["backend"] = dz.run_zoo(
+                _H, _L, _pr, _det, _obs, _names, workers=2, chunk_size=30)
+        return _state["res"]
+
+    def _peel_matches_notebook():
+        ref, fast = PeelingDecoder(_H, _pr), dz.FastPeeling(_H, _pr)
+        for s in _det[:60]:
+            r = ref.decode(s)
+            e, c, _ = fast.decode(s)
+            assert np.array_equal(r.correction, e) and r.converged == c, \
+                "compiled peeling disagrees with the notebook's PeelingDecoder"
+
+    def _zoo_decoders_valid():
+        for name in ("BP-ms-10", "OSD-0", "LSD-CS2"):
+            dec = dz.make_decoder(name, _H, _pr)
+            for s in _det[:20]:
+                e, c, _ = dec.decode(s)
+                ok = np.array_equal((_H @ e) % 2, s)
+                assert c == ok, f"{name}: converged flag disagrees with H·e = s"
+                if name != "BP-ms-10":
+                    assert ok, f"{name}: strong decoder did not reproduce the syndrome"
+
+    class _Adapt:
+        def __init__(self, dec):
+            self.dec = dec
+
+        def decode(self, s):
+            e, c, w = self.dec.decode(s)
+            return DecodeResult(e, c, w)
+
+    def _derivation_matches_switchpolicy():
+        res = _zoo()
+        W, S = _Adapt(dz.make_decoder("peel", _H, _pr)), _Adapt(dz.make_decoder("OSD-0", _H, _pr))
+        n_flags, _ = dz.flag_features(_det, _mask, _code.hx.shape[0], _T)
+        rules = dz.trigger_rules(n_flags, np.zeros_like(n_flags))
+        for trig, rule in [("never", None), ("always", None),
+                           ("primary_fail", "primary_fail"), ("flag_or_fail", "flag>=1")]:
+            pol = SwitchPolicy(W, S, trig, _mask)
+            if rule is None:
+                src = res["peel"] if trig == "never" else res["OSD-0"]
+                esc = np.full(len(_det), trig == "always")
+                fail = src["fail"]
+            else:
+                P = dz.derive(res["peel"], res["OSD-0"], *rules[rule])
+                esc, fail = P["esc"], P["fail"]
+            for i, s in enumerate(_det):
+                r = pol.decode(s)
+                f = bool(np.any((_L @ r.correction) % 2 != _obs[i]))
+                assert r.escalated == esc[i] and f == fail[i], f"{trig}: shot {i} differs"
+
+    def _parallel_matches_sequential():
+        par = _zoo()
+        seq, _ = dz.run_zoo(_H, _L, _pr, _det, _obs, _names, workers=1, chunk_size=30)
+        for n in _names:
+            for k in ("conv", "fail", "work"):
+                assert np.array_equal(par[n][k], seq[n][k]), f"{n}.{k} differs"
+
+    def _paired_exact_known():
+        a = np.zeros(20, bool); b = np.zeros(20, bool); b[:14] = True
+        x, y, p = dz.paired_exact(a, b)
+        assert (x, y) == (0, 14) and abs(p - 2 / 2**14) < 1e-15
+        x, y, p = dz.paired_exact(b, b)
+        assert (x, y, p) == (0, 0, 1.0)
+
+    def _breakeven_formula():
+        pre = np.array([1, 1, 0, 0] * 25, bool)
+        esc_pf = np.array([0, 0, 1, 0] * 25, bool)
+        esc_rule = pre | esc_pf
+        r = dz.breakeven_ratio(esc_rule, pre, esc_pf)
+        assert abs(r - (0.75 - 0.25) / 0.5) < 1e-12, r
+        assert dz.breakeven_ratio(esc_pf, np.zeros(100, bool), esc_pf) == float("inf")
+
+    def _inconclusive_when_few_failures():
+        """Too few failures must never be read as evidence of accuracy parity.
+        (Zero headroom is different: that settles accuracy outright.)"""
+        n_flags, rounds = dz.flag_features(_det, _mask, _code.hx.shape[0], _T)
+        a = dz.analyse(_zoo(), ["peel"], ["OSD-0"], n_flags, rounds, min_failures=10**9)
+        p = a["pairs"][0]
+        assert not p["verdict_accuracy"].startswith("viable"), p["verdict_accuracy"]
+        expected = "impossible: no headroom" if p["headroom"] == 0 else "inconclusive"
+        assert p["verdict_accuracy"] == expected, p["verdict_accuracy"]
+
+    def _ablation_matches_switchpolicy():
+        """E1 derives its policies instead of running them; it must agree exactly."""
+        cfg = ExperimentConfig(code="[[72, 12, 6]]", rounds=_T, p=2e-3, shots=90, seed=17,
+                               use_flags=True, osd_order=0, workers=1)
+        got = run_ablation(cfg, keep_samples=False)
+        peel, osd = PeelingDecoder(_H, _pr), BpOsdDecoder(_H, _pr, osd_order=cfg.osd_order)
+        ref = run_benchmark(_circ, {t: SwitchPolicy(peel, osd, t, _mask)
+                                    for t in ("never", "always", "primary_fail",
+                                              "flag", "flag_or_fail")},
+                            _L, cfg.shots, cfg.seed)
+        for t, m in ref.items():
+            assert got[t].failures == m.failures, \
+                f"{t}: derived {got[t].failures} failures, SwitchPolicy {m.failures}"
+            assert abs(got[t].escalation_rate - m.escalation_rate) < 1e-12, t
+            assert got[t].silent_failures == m.silent_failures, t
+
+    def _positive_control_is_detected():
+        """
+        The check that makes a null believable: inject silent failures on flagged
+        shots and confirm the analysis finds headroom and calls a flag rule viable.
+        """
+        v = dz.logical_null_vector(_H, _L)
+        assert v is not None and not ((_H @ v) % 2).any() and ((_L @ v) % 2).any(), \
+            "null vector must be invisible in the syndrome but flip an observable"
+        spec = dict(dz.CONTROLS["control-flagged-50%"], vector=v, flag_mask=_mask)
+        res, _ = dz.run_zoo(_H, _L, _pr, _det, _obs, [("control", spec), "OSD-0"],
+                            workers=1, chunk_size=45)
+        silent = res["control"]["conv"] & res["control"]["fail"]
+        assert silent.sum() > 0, "the control produced no silent failures"
+        n_flags, rounds = dz.flag_features(_det, _mask, _code.hx.shape[0], _T)
+        assert (n_flags[silent] > 0).all(), "control failures must sit on flagged shots"
+        a = dz.analyse(res, ["control"], ["OSD-0"], n_flags, rounds, min_failures=1)
+        p = a["pairs"][0]
+        assert p["headroom"] > 0, "analysis reports no headroom although silent failures exist"
+        assert p["verdict_accuracy"] == "viable: accuracy", \
+            f"analysis failed to detect a real effect: {p['verdict_accuracy']}"
+
+    def _zero_headroom_is_impossible_not_inconclusive():
+        n_flags, rounds = dz.flag_features(_det, _mask, _code.hx.shape[0], _T)
+        a = dz.analyse(_zoo(), ["peel"], ["OSD-0"], n_flags, rounds, min_failures=10**9)
+        p = a["pairs"][0]
+        if p["headroom"] == 0:
+            assert p["verdict_accuracy"] == "impossible: no headroom", p["verdict_accuracy"]
+
+    def _ceiling_and_diagnostics():
+        res = _zoo()
+        n_flags, _ = dz.flag_features(_det, _mask, _code.hx.shape[0], _T)
+        ceil = {(c["decoder"], c["compared_with"]): c
+                for c in dz.strong_ceiling(res, ["OSD-0", "LSD-0"])}
+        c = ceil[("OSD-0", "LSD-0")]
+        assert c["failures"] == int(res["OSD-0"]["fail"].sum())
+        assert c["fixed_by_other"] == int((res["OSD-0"]["fail"] & ~res["LSD-0"]["fail"]).sum())
+        diag = {d["decoder"]: d for d in dz.flag_diagnostics(res, ["peel"], ["OSD-0"], n_flags)}
+        assert 0.0 <= diag["peel"]["mutual_information_bits"] <= 1.0
+        # a signal independent of the flags must carry no information
+        rng = np.random.default_rng(0)
+        fake = dict(res["peel"], fail=rng.random(len(_det)) < 0.3)
+        mi = dz.flag_diagnostics({"peel": fake}, ["peel"], [], n_flags)[0]["mutual_information_bits"]
+        assert mi < 0.02, f"independent signal reported {mi:.3f} bits"
+
+    def _blind_decoding_removes_flag_rows():
+        """
+        V4's 'blind' arm must drop the flag detector rows, not zero them: a zeroed
+        syndrome claims no flag fired, which is a syndrome that never occurred.
+        """
+        keep = ~_mask
+        H_blind, det_blind = _H[keep], _det[:, keep]
+        assert H_blind.shape[0] == _H.shape[0] - int(_mask.sum())
+        assert det_blind.shape[1] == H_blind.shape[0]
+        dec = dz.make_decoder({"kind": "osd", "osd_order": 0, "max_iter": 20}, H_blind, _pr)
+        for s_blind in det_blind[:15]:
+            e, _, _ = dec.decode(s_blind)
+            assert np.array_equal((H_blind @ e) % 2, s_blind), \
+                "blind arm must still decode consistently on the reduced matrix"
+
+    def _flag_rate_grows_with_rounds():
+        """V5's mechanism: more rounds means more chances for a flag to fire."""
+        means = []
+        for T in (2, 6):
+            circ = build_memory_circuit(_code, T, 2e-3, use_flags=True)
+            det = circ.compile_detector_sampler(seed=3).sample(400)
+            mask = flag_detector_mask(_code, T, True, circ.num_detectors)
+            means.append(float(det[:, mask].sum(1).mean()))
+        assert means[1] > means[0], f"mean flags per shot did not grow with T: {means}"
+
+    def _graphs_render():
+        import io
+        n_flags, rounds = dz.flag_features(_det, _mask, _code.hx.shape[0], _T)
+        a = dz.analyse(_zoo(), ["peel", "BP-ms-10"], ["OSD-0", "LSD-0"], n_flags, rounds)
+        for fn in (plot_zoo_verdicts, plot_zoo_silent, plot_zoo_breakeven, plot_zoo_tradeoffs):
+            fn(a).savefig(io.BytesIO(), format="png")
+
+    def _headroom_bounds_gain():
+        n_flags, rounds = dz.flag_features(_det, _mask, _code.hx.shape[0], _T)
+        a = dz.analyse(_zoo(), ["peel", "BP-ms-10"], ["OSD-0", "LSD-0"], n_flags, rounds)
+        head = {(p["weak"], p["strong"]): p["headroom"] for p in a["pairs"]}
+        for r in a["rows"]:
+            assert r["better"] <= head[(r["weak"], r["strong"])], "gain exceeds headroom"
+            if r["rule"] not in ("flag-only", "primary_fail"):
+                assert (r["better"], r["worse"]) == (r["catch"], r["harm"]), \
+                    "gains/losses vs primary_fail must be exactly catches/harms"
+        assert len(a["pairs"]) == 4 and all("verdict" in p for p in a["pairs"])
+
+    tests_zoo = run_checks([
+        ("compiled peeling reproduces the notebook's PeelingDecoder exactly", _peel_matches_notebook),
+        ("zoo decoders: honest convergence, strong ones always valid", _zoo_decoders_valid),
+        ("derived policies reproduce SwitchPolicy shot by shot", _derivation_matches_switchpolicy),
+        ("parallel decoding gives the same results as sequential", _parallel_matches_sequential),
+        ("paired exact test gives known p-values", _paired_exact_known),
+        ("break-even cost ratio formula", _breakeven_formula),
+        ("no rule gains more than the headroom; gains = catches", _headroom_bounds_gain),
+        ("too few failures gives 'inconclusive', never 'viable'", _inconclusive_when_few_failures),
+        ("all four E3 graphs render", _graphs_render),
+        ("parallel E1 (run_ablation) matches SwitchPolicy exactly", _ablation_matches_switchpolicy),
+        ("POSITIVE CONTROL: injected silent failures are detected", _positive_control_is_detected),
+        ("zero headroom reports 'impossible', not 'inconclusive'", _zero_headroom_is_impossible_not_inconclusive),
+        ("strong-decoder ceiling and flag diagnostics are correct", _ceiling_and_diagnostics),
+        ("V4 blind arm removes flag rows rather than zeroing them", _blind_decoding_removes_flag_rows),
+        ("V5 flag rate grows with the number of rounds", _flag_rate_grows_with_rounds),
+    ])
+    _backend = _state.get("backend", "not run")
+    mo.vstack([render_checks("decoder zoo", tests_zoo),
+               mo.md(f"Parallel backend on this machine: **{_backend}** · "
+                     f"compiled peeling (numba): **{'yes' if dz.HAVE_NUMBA else 'no — run `uv add numba`'}**")])
+    return (tests_zoo,)
+
+
+@app.cell
+def _(BB_PRESETS, GB_PRESETS, dz, mo, os):
+    _cores = os.cpu_count() or 1
+    ui_zoo_code = mo.ui.dropdown(list(BB_PRESETS) + list(GB_PRESETS), value="[[72, 12, 6]]", label="Code")
+    ui_zoo_rounds = mo.ui.slider(1, 12, value=6, label="Rounds T")
+    ui_zoo_p = mo.ui.dropdown(["5e-4", "1e-3", "2e-3", "3e-3"], value="1e-3", label="p")
+    ui_zoo_shots = mo.ui.number(start=100, stop=1_000_000, step=100, value=20_000, label="Shots")
+    ui_zoo_seed = mo.ui.number(value=20260922, label="Seed")
+    ui_zoo_workers = mo.ui.slider(1, max(2, _cores), value=max(1, _cores - 1),
+                                  label=f"CPU workers (of {_cores})")
+    ui_zoo_weak = mo.ui.multiselect(list(dz.WEAK) + list(dz.CONTROLS), value=dz.DEFAULT_WEAK,
+                                    label="Weak decoders")
+    ui_zoo_strong = mo.ui.multiselect(list(dz.STRONG), value=dz.DEFAULT_STRONG, label="Strong decoders")
+    mo.vstack([mo.md("### E3 configuration (flags always on)"),
+               mo.hstack([ui_zoo_code, ui_zoo_p, ui_zoo_rounds]),
+               mo.hstack([ui_zoo_shots, ui_zoo_seed, ui_zoo_workers]),
+               ui_zoo_weak, ui_zoo_strong,
+               mo.md("*OSD-CS orders cost roughly 15× OSD-0 per shot; LSD-CS is far cheaper. "
+                     "Use the estimate button before a long run.*"),
+               mo.md("*`control-*` weak decoders are **positive controls**: they are wrong "
+                     "on a fraction of flagged shots by construction. Run one to show this "
+                     "analysis detects silent failures when they exist — the check that makes "
+                     "a negative result believable.*")])
+    return (
+        ui_zoo_code,
+        ui_zoo_p,
+        ui_zoo_rounds,
+        ui_zoo_seed,
+        ui_zoo_shots,
+        ui_zoo_strong,
+        ui_zoo_weak,
+        ui_zoo_workers,
+    )
+
+
+@app.cell
+def _(
+    build_memory_circuit,
+    code_from_key,
+    dem_to_matrices,
+    flag_detector_mask,
+    ui_zoo_code,
+    ui_zoo_p,
+    ui_zoo_rounds,
+    ui_zoo_seed,
+    ui_zoo_shots,
+    ui_zoo_strong,
+    ui_zoo_weak,
+    ui_zoo_workers,
+):
+    zoo_setup = dict(code=ui_zoo_code.value, rounds=int(ui_zoo_rounds.value),
+                     p=float(ui_zoo_p.value), shots=int(ui_zoo_shots.value),
+                     seed=int(ui_zoo_seed.value), workers=int(ui_zoo_workers.value),
+                     weak=list(ui_zoo_weak.value), strong=list(ui_zoo_strong.value))
+
+    def build_zoo_problem(setup):
+        """Circuit, DEM matrices and flag mask for an E3 configuration."""
+        code = code_from_key(setup["code"])
+        circ = build_memory_circuit(code, setup["rounds"], setup["p"], use_flags=True)
+        H, L, pr = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
+        mask = flag_detector_mask(code, setup["rounds"], True, circ.num_detectors)
+        return code, circ, H, L, pr, mask
+
+    return build_zoo_problem, zoo_setup
+
+
+@app.cell
+def _(RESULTS_DIR, dz, glob, mo, os, zoo_setup):
+    import hashlib as _hashlib
+    _tag = zoo_setup["code"].strip("[]").replace(", ", "-")
+    _stem = (f"E3_{_tag}_T{zoo_setup['rounds']}_p{zoo_setup['p']:g}_"
+             f"{zoo_setup['shots']}shots_seed{zoo_setup['seed']}")
+    _key = _hashlib.sha1(",".join(zoo_setup["weak"] + zoo_setup["strong"]).encode()).hexdigest()[:8]
+    zoo_checkpoint = dict(data_path=os.path.join(RESULTS_DIR, _stem + ".npz"),
+                          dir=os.path.join(RESULTS_DIR, "checkpoints", f"{_stem}_{_key}"))
+    _done = len(glob.glob(os.path.join(zoo_checkpoint["dir"], "chunk_*.npz")))
+    _total = -(-zoo_setup["shots"] // dz.CHUNK_SIZE)
+    (mo.md(f"🔁 **A partial run of this configuration exists: {_done}/{_total} chunks done.** "
+           "Pressing Run E3 resumes it instead of starting over.")
+     if _done else mo.md(""))
+    return (zoo_checkpoint,)
+
+
+@app.cell
+def _(mo):
+    run_zoo_estimate = mo.ui.run_button(label="Estimate run time (~30 s pilot)")
+    run_zoo = mo.ui.run_button(label="Run E3 — decoder zoo")
+    mo.hstack([run_zoo_estimate, run_zoo])
+    return run_zoo, run_zoo_estimate
+
+
+@app.cell
+def _(build_zoo_problem, core_ready, dz, mo, np, run_zoo_estimate, tests_zoo, time, zoo_setup):
+    mo.stop(not (core_ready and all(r["status"] == "PASS" for r in tests_zoo)),
+            mo.md("*E3 locked until every test, including the decoder-zoo tests, passes.*"))
+    mo.stop(not run_zoo_estimate.value)
+    _code, _circ, _H, _L, _pr, _ = build_zoo_problem(zoo_setup)
+    _det = _circ.compile_detector_sampler(seed=1).sample(25).astype(np.uint8)
+    _rows, _total = [], 0.0
+    for _name in zoo_setup["weak"] + zoo_setup["strong"]:
+        _dec = dz.make_decoder(_name, _H, _pr)
+        _dec.decode(_det[0])                              # compile / warm up
+        _t0 = time.perf_counter()
+        for _s in _det:
+            _dec.decode(_s)
+        _ms = 1e3 * (time.perf_counter() - _t0) / len(_det)
+        _total += _ms
+        _rows.append(f"| {_name} | {_ms:.2f} ms |")
+    _eta = zoo_setup["shots"] * _total / 1e3 / max(1, zoo_setup["workers"])
+    mo.md("| decoder | time per shot |\n|:--|--:|\n" + "\n".join(_rows)
+          + f"\n\n**Estimated run time: {_eta / 60:.0f} min** for {zoo_setup['shots']:,} shots "
+            f"on {zoo_setup['workers']} workers (parallel speed-up is usually a little below the "
+            "worker count).")
+    return
+
+
+@app.cell
+def _(
+    build_zoo_problem,
+    core_ready,
+    datetime,
+    dz,
+    glob,
+    mo,
+    os,
+    run_zoo,
+    tests_zoo,
+    zoo_checkpoint,
+    zoo_setup,
+):
+    def _run_e3():
+        """Sample the shots, decode them with every decoder, save, and summarise."""
+        _code, _circ, _H, _L, _pr, _mask = build_zoo_problem(zoo_setup)
+        _det, _obs = _circ.compile_detector_sampler(seed=zoo_setup["seed"]).sample(
+            zoo_setup["shots"], separate_observables=True)
+        _n_flags, _rounds = dz.flag_features(_det, _mask, _code.hx.shape[0], zoo_setup["rounds"])
+        _names = []
+        _vector = None
+        for _n in zoo_setup["weak"] + zoo_setup["strong"]:
+            _spec = dict(dz.CATALOGUE[_n])
+            if _spec.get("kind") == "control":
+                if _vector is None:
+                    _vector = dz.logical_null_vector(_H, _L)   # H v = 0 but L v = 1
+                _spec.update(vector=_vector, flag_mask=_mask)
+            _names.append((_n, _spec))
+        _n_chunks = -(-zoo_setup["shots"] // dz.CHUNK_SIZE)
+        with mo.status.progress_bar(total=_n_chunks, title="E3: decoding", show_eta=True,
+                                    show_rate=True) as _bar:
+            # every finished chunk is written to zoo_checkpoint["dir"] at once, so an
+            # interrupted run resumes when Run E3 is pressed again with the same settings
+            _res, _backend = dz.run_zoo(_H, _L, _pr, _det, _obs, _names,
+                                        workers=zoo_setup["workers"], on_chunk=_bar.update,
+                                        checkpoint_dir=zoo_checkpoint["dir"])
+        _path = zoo_checkpoint["data_path"]
+        _meta = dict(zoo_setup, backend=_backend, numba=dz.HAVE_NUMBA,
+                     created=datetime.datetime.now().isoformat(timespec="seconds"))
+        dz.save_zoo(_path, _res, _n_flags, _rounds, _meta)
+        for _f in glob.glob(os.path.join(zoo_checkpoint["dir"], "chunk_*.npz")):
+            os.remove(_f)                     # the full result is saved: drop the checkpoints
+        if os.path.isdir(zoo_checkpoint["dir"]) and not os.listdir(zoo_checkpoint["dir"]):
+            os.rmdir(zoo_checkpoint["dir"])
+        _data = dict(results=_res, n_flags=_n_flags, flag_rounds=_rounds, meta=_meta, path=_path)
+        return _data, mo.md(f"Decoded {zoo_setup['shots']:,} shots × {len(_names)} decoders "
+                            f"({_backend}). Saved to `{_path}`.")
+
+    # Always define e3_run (None when not run): marimo does not run cells that
+    # depend on a variable that a stopped cell never defined.
+    e3_run = None
+    if not (core_ready and all(r["status"] == "PASS" for r in tests_zoo)):
+        _out = mo.md("*E3 locked until every test passes.*")
+    elif not run_zoo.value:
+        _out = mo.md("*Press **Run E3** to start, or load a previous run below.*")
+    else:
+        e3_run, _out = _run_e3()
+    _out
+    return (e3_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, e3_run, glob, mo, os):
+    _ = e3_run                            # re-list saved runs after each new run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "E3_*.npz")))
+    ui_zoo_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+                                 value=os.path.basename(_files[-1]) if _files else None,
+                                 label="Previous E3 run")
+    load_zoo_btn = mo.ui.run_button(label="Load")
+    mo.hstack([ui_zoo_file, load_zoo_btn]) if _files else mo.md("*No saved E3 runs yet.*")
+    return load_zoo_btn, ui_zoo_file
+
+
+@app.cell
+def _(dz, load_zoo_btn, ui_zoo_file):
+    e3_loaded = None                      # always defined, see the run cell
+    if load_zoo_btn.value and ui_zoo_file.value:
+        _res, _nf, _fr, _meta = dz.load_zoo(ui_zoo_file.value)
+        e3_loaded = dict(results=_res, n_flags=_nf, flag_rounds=_fr, meta=_meta,
+                         path=ui_zoo_file.value)
+    return (e3_loaded,)
+
+
+@app.cell
+def _(dz, e3_loaded, e3_run, mo):
+    e3_data = e3_run if e3_run is not None else e3_loaded
+    mo.stop(e3_data is None, mo.md("*Run E3 or load a previous run to see the analysis.*"))
+    _names = list(e3_data["results"])
+    e3_weak = [n for n in _names if n in dz.WEAK or n in dz.CONTROLS]
+    e3_strong = [n for n in _names if n in dz.STRONG]
+    e3_analysis = dz.analyse(e3_data["results"], e3_weak, e3_strong,
+                             e3_data["n_flags"], e3_data["flag_rounds"])
+
+    _pairs = e3_analysis["pairs"]
+    _viable = [p for p in _pairs if p["verdict"].startswith("viable")]
+    _inconclusive = [p for p in _pairs if p["verdict"] == "inconclusive"]
+    _head = sum(p["headroom"] for p in _pairs)
+    _lines = [f"### E3 verdict — {e3_analysis['shots']:,} shots, "
+              f"{len(e3_weak)} weak × {len(e3_strong)} strong decoders, `{e3_data['path']}`", ""]
+    if _viable:
+        _lines.append(f"**Flag-triggered switching is viable for {len(_viable)} of {len(_pairs)} pairs:** "
+                      + ", ".join(f"{p['weak']} → {p['strong']} ({p['verdict'].split(': ')[1]}, "
+                                  f"rule `{p['best_accuracy_rule'] or p['best_cost_rule']}`)"
+                                  for p in _viable) + ".")
+    elif not _inconclusive:
+        _lines.append(f"**Flag-triggered switching is not viable for any of the {len(_pairs)} pairs.**")
+    if _inconclusive:
+        _lines.append(f"**{len(_inconclusive)} of {len(_pairs)} pairs are inconclusive**: "
+                      "fewer than 20 primary_fail failures. Run more shots (or a higher p) "
+                      "before drawing conclusions about them.")
+    _lines.append(f"Total headroom (weak-decoder silent failures the strong decoder fixes): "
+                  f"**{_head}** across all pairs — the most accuracy any flag rule could gain.")
+    _lines += ["", "**Accuracy and cost are judged separately.** Headroom is the number of "
+               "weak-decoder silent failures the strong decoder fixes: with zero headroom no "
+               "flag rule can gain accuracy, however many shots you run, so the verdict is "
+               "*impossible*, not *inconclusive*. A difference of at least "
+               f"{_pairs[0]['min_detectable_discordant'] if _pairs else 6} discordant shots is "
+               "needed for significance.", "",
+               "| weak → strong | accuracy | cost | headroom | primary_fail fails | always fails | "
+               "escalated | best saving (no harm) | best rule |",
+               "|:--|:--|:--|--:|--:|--:|--:|--:|:--|"]
+    for p in _pairs:
+        _lines.append(f"| {p['weak']} → {p['strong']} | {p['verdict_accuracy']} | "
+                      f"{p['verdict_cost']} | {p['headroom']} | {p['pf_failures']} | "
+                      f"{p['always_failures']} | {p['pf_escalation']:.1%} | "
+                      f"{p['best_saving']:+.1%} | "
+                      f"{p['best_accuracy_rule'] or p['best_cost_rule'] or '—'} |")
+    _lines += ["", "#### What do the flags tell us?", "",
+               "Mutual information between *a flag fired* and *this decoder was wrong*. "
+               "Near zero means the trigger carries almost no usable signal.", "",
+               "| decoder | error rate, flagged | unflagged | risk ratio | MI (bits) | "
+               "share of failures on flagged shots |", "|:--|--:|--:|--:|--:|--:|"]
+    for f in e3_analysis["flag_diagnostics"]:
+        _lines.append(f"| {f['decoder']} | {f['error_rate_flagged']:.2e} | "
+                      f"{f['error_rate_unflagged']:.2e} | {f['risk_ratio']:.1f}× | "
+                      f"{f['mutual_information_bits']:.4f} | "
+                      f"{f['share_of_failures_on_flagged']:.1%} |")
+    if e3_analysis["strong_ceiling"]:
+        _lines += ["", "#### Is there headroom left in the strong decoder?", "",
+                   "Shots one strong decoder gets wrong that another gets right. If almost none "
+                   "are fixed, those failures are near-uncorrectable at this noise level and "
+                   "reweighting priors — flag-informed or otherwise — cannot help either.", "",
+                   "| decoder | failures | fixed by | fixed | broken |",
+                   "|:--|--:|:--|--:|--:|"]
+        for c in e3_analysis["strong_ceiling"]:
+            _lines.append(f"| {c['decoder']} | {c['failures']} | {c['compared_with']} | "
+                          f"{c['fixed_by_other']} | {c['broken_by_other']} |")
+    _lines += ["", "| weak decoder | converged | silent failures | silent rate (95% upper) | "
+               "on flagged shots | median time |", "|:--|--:|--:|--:|--:|--:|"]
+    for w, v in e3_analysis["weak"].items():
+        _lines.append(f"| {w} | {v['converged']:,} | {v['silent']} | {v['silent_rate'][2]:.2e} | "
+                      f"{v['silent_flagged']} | {v['time_us'] / 1e3:.2f} ms |")
+    mo.md("\n".join(_lines))
+    return e3_analysis, e3_data, e3_strong, e3_weak
+
+
+@app.cell
+def _(np, plt):
+    def zoo_pair_rows(a, w, s):
+        return [r for r in a["rows"] if r["weak"] == w and r["strong"] == s]
+
+    def plot_zoo_verdicts(a):
+        """Heatmap: best flag rule's net gain over primary_fail, per 10k shots."""
+        W = list(dict.fromkeys(p["weak"] for p in a["pairs"]))
+        S = list(dict.fromkeys(p["strong"] for p in a["pairs"]))
+        grid = np.zeros((len(W), len(S)))
+        pairs = {(p["weak"], p["strong"]): p for p in a["pairs"]}
+        for i, w in enumerate(W):
+            for j, s in enumerate(S):
+                rows = [r for r in zoo_pair_rows(a, w, s) if r["rule"] != "primary_fail"]
+                grid[i, j] = max(r["better"] - r["worse"] for r in rows) / a["shots"] * 1e4
+        lim = max(1.0, np.abs(grid).max())
+        fig, ax = plt.subplots(figsize=(1.9 * len(S) + 2.5, 0.95 * len(W) + 1.8))
+        im = ax.imshow(grid, cmap="RdBu", vmin=-lim, vmax=lim)
+        for i, w in enumerate(W):
+            for j, s in enumerate(S):
+                p = pairs[(w, s)]
+                mark = {"viable: accuracy": "✓ accuracy", "viable: cost": "✓ cost",
+                        "inconclusive": "? too few fails",
+                        "not viable": "✗ no gain"}.get(p["verdict"], "✗")
+                if p["headroom"] == 0 and not p["verdict"].startswith("viable"):
+                    mark = "✗ no headroom"
+                ax.text(j, i, f"{mark}\nΔ {grid[i, j]:+.1f}\nheadroom {p['headroom']}",
+                        ha="center", va="center", fontsize=8)
+        ax.set_xticks(range(len(S)), S, rotation=20)
+        ax.set_yticks(range(len(W)), W)
+        ax.set_xlabel("strong decoder")
+        ax.set_ylabel("weak decoder")
+        fig.colorbar(im, ax=ax, label="best flag rule: failures saved per 10k shots vs primary_fail")
+        ax.set_title(f"Is flag-triggered switching viable? ({a['shots']:,} paired shots)")
+        fig.tight_layout()
+        return fig
+
+    def plot_zoo_silent(a):
+        """Silent-failure rate of each weak decoder: the only failures a flag can catch."""
+        names = list(a["weak"])
+        fig, ax = plt.subplots(figsize=(1.6 * len(names) + 2, 4))
+        for i, n in enumerate(names):
+            v = a["weak"][n]
+            ph, lo, hi = v["silent_rate"]
+            if v["silent"]:
+                ax.errorbar(i, ph, yerr=[[ph - lo], [hi - ph]], fmt="o", color="#d62728", capsize=4)
+            else:
+                ax.plot(i, hi, "v", ms=9, mfc="none", mec="#d62728")
+            ax.annotate(f"{v['silent']}/{v['converged']:,}", (i, hi), textcoords="offset points",
+                        xytext=(0, 9), ha="center", fontsize=8)
+        ax.set_yscale("log")
+        ax.set_xlim(-0.6, len(names) - 0.4)
+        _lo, _hi = ax.get_ylim()
+        ax.set_ylim(_lo / 3, _hi * 3)
+        ax.set_xticks(range(len(names)), names)
+        ax.set_ylabel("silent failures / converged shots")
+        ax.set_title("How often is each weak decoder confidently wrong?\n(▽ = none seen: 95% upper bound)")
+        ax.grid(True, which="both", axis="y", alpha=0.3)
+        fig.tight_layout()
+        return fig
+
+    def plot_zoo_breakeven(a):
+        """
+        Measured cost ratio c_weak/c_strong against the break-even ratio r* of each
+        pair's cheapest flag rule with no accuracy loss. Points in the shaded region
+        (measured ratio > r*) are pairs where that rule saves time on this machine.
+        """
+        weak = list(dict.fromkeys(p["weak"] for p in a["pairs"]))
+        strong = list(dict.fromkeys(p["strong"] for p in a["pairs"]))
+        colours = ["#1f77b4", "#d62728", "#2ca02c", "#9467bd", "#ff7f0e", "#8c564b"]
+        markers = ["o", "s", "^", "D", "v", "P", "X"]
+        fig, ax = plt.subplots(figsize=(8, 5.5))
+        for p in a["pairs"]:
+            rows = [r for r in zoo_pair_rows(a, p["weak"], p["strong"])
+                    if r["rule"] != "primary_fail" and r["worse"] <= r["better"]
+                    and np.isfinite(r["breakeven"])]
+            if not rows:
+                continue
+            r = min(rows, key=lambda r: r["breakeven"])
+            ax.plot(max(p["cost_ratio"], 1e-4), max(r["breakeven"], 1e-3),
+                    markers[strong.index(p["strong"]) % len(markers)],
+                    color=colours[weak.index(p["weak"]) % len(colours)], ms=8, ls="none")
+        xs = np.logspace(-4, 1.5, 100)
+        ax.plot(xs, xs, "k--", lw=1)
+        ax.fill_between(xs, 1e-3, xs, color="#2ca02c", alpha=0.08)
+        ax.text(0.97, 0.05, "flag rule cheaper\n(measured ratio > r*)", transform=ax.transAxes,
+                ha="right", fontsize=8, color="#2ca02c")
+        for i, w in enumerate(weak):
+            ax.plot([], [], "o", color=colours[i % len(colours)], label=f"weak: {w}")
+        for j, s in enumerate(strong):
+            ax.plot([], [], markers[j % len(markers)], color="grey", label=f"strong: {s}")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlim(1e-4, 30)
+        ax.set_ylim(1e-3, 30)
+        ax.set_xlabel("measured cost ratio  c_weak / c_strong  (median time per shot)")
+        ax.set_ylabel("break-even ratio r* (cheapest flag rule with no accuracy loss)")
+        ax.set_title("When could a flag trigger save time?")
+        ax.legend(fontsize=7, loc="upper left", ncol=2)
+        ax.grid(True, which="both", alpha=0.3)
+        fig.tight_layout()
+        return fig
+
+    def plot_zoo_tradeoffs(a):
+        """Small multiples: failures vs escalation for every rule, one panel per pair."""
+        W = list(dict.fromkeys(p["weak"] for p in a["pairs"]))
+        S = list(dict.fromkeys(p["strong"] for p in a["pairs"]))
+        fig, axes = plt.subplots(len(W), len(S), figsize=(3.1 * len(S), 2.5 * len(W)),
+                                 squeeze=False, sharex=True)
+        for i, w in enumerate(W):
+            for j, s in enumerate(S):
+                ax = axes[i][j]
+                for r in zoo_pair_rows(a, w, s):
+                    pf = r["rule"] == "primary_fail"
+                    ax.plot(r["escalation"], r["failures"], "*" if pf else "o",
+                            color="#2ca02c" if pf else ("#d62728" if r["rule"] == "flag-only" else "#9467bd"),
+                            ms=11 if pf else 5)
+                ax.set_title(f"{w} → {s}", fontsize=8)
+                ax.tick_params(labelsize=7)
+                ax.grid(True, alpha=0.3)
+                if i == len(W) - 1:
+                    ax.set_xlabel("escalated", fontsize=8)
+                if j == 0:
+                    ax.set_ylabel("failures", fontsize=8)
+        fig.suptitle("Every rule for every pair (★ primary_fail, ● flag rules, red = flag-only). "
+                     "A viable rule sits below ★.", fontsize=9)
+        fig.tight_layout()
+        return fig
+
+    return (
+        plot_zoo_breakeven,
+        plot_zoo_silent,
+        plot_zoo_tradeoffs,
+        plot_zoo_verdicts,
+        zoo_pair_rows,
+    )
+
+
+@app.cell
+def _(
+    e3_analysis,
+    e3_data,
+    export_bundle,
+    mo,
+    plot_zoo_breakeven,
+    plot_zoo_silent,
+    plot_zoo_tradeoffs,
+    plot_zoo_verdicts,
+):
+    _figs = {"verdicts": plot_zoo_verdicts(e3_analysis), "silent_failures": plot_zoo_silent(e3_analysis),
+             "breakeven": plot_zoo_breakeven(e3_analysis), "tradeoffs": plot_zoo_tradeoffs(e3_analysis)}
+    _weak = [dict(weak=w, converged=v["converged"], silent=v["silent"],
+                  silent_rate=v["silent_rate"][0], silent_rate_upper=v["silent_rate"][2],
+                  silent_on_flagged=v["silent_flagged"], median_time_us=v["time_us"])
+             for w, v in e3_analysis["weak"].items()]
+    _rows = [{k: (v[0] if k == "ler" else v) for k, v in r.items()} | dict(
+                 ler_low=r["ler"][1], ler_high=r["ler"][2]) for r in e3_analysis["rows"]]
+    _counts = {}
+    for _p in e3_analysis["pairs"]:
+        _counts[_p["verdict"]] = _counts.get(_p["verdict"], 0) + 1
+    _folder = export_bundle(
+        e3_data["path"], f"E3 decoder zoo — {e3_analysis['shots']:,} shots",
+        dict(_figs), {"verdicts": e3_analysis["pairs"], "weak_decoders": _weak, "all_rules": _rows,
+                      "flag_diagnostics": e3_analysis["flag_diagnostics"],
+                      "strong_ceiling": e3_analysis["strong_ceiling"]},
+        notes="Verdict counts: " + ", ".join(f"{k}: {v}" for k, v in sorted(_counts.items())))
+    mo.vstack([mo.md(f"**Exported** figures (PNG + PDF), CSV tables and report to `{_folder}`"),
+               *[_f for _f in _figs.values()]])
+    return
 
 
 @app.cell(hide_code=True)
