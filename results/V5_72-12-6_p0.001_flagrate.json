@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "created": "2026-09-23T21:37:06",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.24.2"
+ },
+ "kind": "validation",
+ "config": {
+  "code": "[[72, 12, 6]]",
+  "p": 0.001,
+  "shots": 2000
+ },
+ "checks": {
+  "v5": [
+   {
+    "rounds": 3,
+    "flag_detectors": 108,
+    "fraction_any_flag": 0.4325,
+    "mean_flags_per_shot": 0.5825
+   },
+   {
+    "rounds": 6,
+    "flag_detectors": 216,
+    "fraction_any_flag": 0.6945,
+    "mean_flags_per_shot": 1.1615
+   },
+   {
+    "rounds": 12,
+    "flag_detectors": 432,
+    "fraction_any_flag": 0.909,
+    "mean_flags_per_shot": 2.294
+   },
+   {
+    "rounds": 18,
+    "flag_detectors": 648,
+    "fraction_any_flag": 0.9675,
+    "mean_flags_per_shot": 3.389
+   },
+   {
+    "rounds": 24,
+    "flag_detectors": 864,
+    "fraction_any_flag": 0.991,
+    "mean_flags_per_shot": 4.5255
+   }
+  ]
+ }
+}

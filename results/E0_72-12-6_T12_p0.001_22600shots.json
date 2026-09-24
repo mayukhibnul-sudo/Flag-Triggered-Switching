@@ -1,0 +1,54 @@
+{
+ "schema": 1,
+ "created": "2026-09-23T18:45:57",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.24.2"
+ },
+ "kind": "validation",
+ "config": {
+  "code": "[[72, 12, 6]]",
+  "rounds": 12,
+  "p": 0.001,
+  "shots": 22600,
+  "target": 0.935
+ },
+ "source": "Pakhunov (2026), Table II, [[72,12,6]], p=1e-3, T=12",
+ "checks": {
+  "v1": {
+   "reference_faults": 3096,
+   "our_faults": 36144,
+   "our_faults_unflagged": 33552,
+   "ratio": 10.837209302325581
+  },
+  "v2": {
+   "measured": 0.3632300884955752,
+   "ci_low": 0.35698358474722586,
+   "ci_high": 0.36952308127011163,
+   "target": 0.935,
+   "agrees": false,
+   "measured_unflagged": 0.4095132743362832
+  },
+  "v3": {
+   "ler_flagged": [
+    0.016371681415929203,
+    0.014797486230905462,
+    0.018110265166538415
+   ],
+   "ler_unflagged": [
+    0.022123893805309734,
+    0.02028588124633015,
+    0.02412433971363269
+   ],
+   "effect": "flags improve accuracy",
+   "extra_faults": 2592,
+   "extra_detectors": 432,
+   "flagged_fraction": 0.8908407079646018,
+   "silent_flagged": 0,
+   "silent_unflagged": 0
+  }
+ }
+}

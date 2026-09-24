@@ -1,0 +1,13 @@
+decoder,compared_with,failures,fixed_by_other,broken_by_other
+OSD-0,OSD-CS4,7,4,0
+OSD-0,LSD-0,7,0,0
+OSD-0,LSD-CS4,7,0,0
+OSD-CS4,OSD-0,3,0,4
+OSD-CS4,LSD-0,3,0,4
+OSD-CS4,LSD-CS4,3,0,4
+LSD-0,OSD-0,7,0,0
+LSD-0,OSD-CS4,7,4,0
+LSD-0,LSD-CS4,7,0,0
+LSD-CS4,OSD-0,7,0,0
+LSD-CS4,OSD-CS4,7,4,0
+LSD-CS4,LSD-0,7,0,0
