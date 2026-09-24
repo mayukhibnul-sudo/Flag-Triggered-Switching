@@ -1,0 +1,22 @@
+# E0 validation — [[72, 12, 6]], T=6, p=0.001
+
+Data file: `E0_72-12-6_T6_p0.001_500shots.json`  
+Exported: 2026-09-23T21:12:42
+
+Literature source: Pakhunov (2026), Table II, [[72,12,6]], p=1e-3, T=12
+
+## Table: checks
+
+[checks.csv](checks.csv) — 4 rows
+
+| check | value | detail |
+|---|---|---|
+| V1 fault-model density | 10.0× | 15,840 faults vs 1,584 from n(wT + T/2 + 1) |
+| V2 reproduces literature | no | ours 0.608 [0.565, 0.650] vs 0.935 (Pakhunov (2026), Table II, [[72,12,6]], p=1e-3, T=12) |
+| V3 cost of flags | no resolvable difference | LER 4.00e-03 with flags vs 8.00e-03 without; +1,296 faults, +216 detectors; flags fire on 68.8% of shots |
+| silent failures (weak decoder) | 0 flagged / 0 unflagged | the only failures a flag trigger could ever catch |
+
+## Figure: validation
+
+![validation](validation.png)  
+Vector version: [validation.pdf](validation.pdf)
