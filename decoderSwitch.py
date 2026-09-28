@@ -48,7 +48,9 @@ def _(mo):
     mo.md(r"""
     # Flag-Triggered Decoder Switching for Bivariate Bicycle Codes
 
-    **TODO:** authors, supervisor, BRAC University, date
+    Undergraduate thesis · BRAC University
+
+    *Authors and supervisor: add your names here before submission.*
 
     ---
 
@@ -63,6 +65,7 @@ def _(mo):
     ## Outline
 
     1. Motivation and research question
+    1b. Glossary: the symbols and terms used in the tables and graphs
     2. GF(2) linear algebra
     3. Bivariate bicycle codes
     4. Circuit-level noise and flag qubits
@@ -72,7 +75,7 @@ def _(mo):
     8. Statistics and benchmarking
     9. Reproducibility
     10. Implementation status
-    11. Experiments: E0 validation and flag cost, E1 ablation, E2 sweep, E3 decoder zoo
+    11. Experiments 1-6: validation, flag cost vs information, trigger saturation, ablation, noise sweep, decoder zoo
     12. Results, discussion, conclusion
     """)
     return
@@ -123,17 +126,80 @@ def _(mo):
     mo.md(r"""
     ## 1. Motivation and research question
 
-    **TODO — write these in your own words:**
+    A quantum computer must correct errors faster than they accumulate. Every
+    syndrome-extraction round produces a new syndrome, and if the decoder cannot
+    keep up, the undecoded rounds pile into a backlog that grows without bound.
+    Accurate decoders (BP+OSD) are slow; fast decoders (belief propagation alone,
+    greedy peeling) are less accurate. **Decoder switching** resolves the tension
+    by running the fast decoder on most shots and escalating the hard ones to the
+    accurate decoder, which is worthwhile only if the escalation signal is good.
 
-    - **Problem.** Why decoder latency matters for real-time QEC; the backlog problem.
-    - **Existing approach.** Fast-primary / accurate-secondary switching that
-      decides *after* the primary decoder runs (post-hoc reliability).
-    - **Gap.** A trigger available *before* decoding — a hardware flag — could
-      skip the wasted primary pass on hard syndromes.
-    - **Research question.** Does a pre-decode flag trigger reduce latency or
-      escalation rate relative to the trivial "escalate when the primary fails"
-      rule, at equal logical error rate?
-    - **Hypothesis and what would falsify it.**
+    Existing schemes decide *after* the fast decoder has run, from its convergence
+    or its confidence. **Flag qubits** offer a different signal. A flag ancilla
+    attached to a check ancilla detects faults that would otherwise spread from the
+    ancilla into several data qubits (hook errors), and its outcome is available
+    *before* any decoding. That suggests a pre-decode trigger: if a flag fired,
+    send the shot straight to the accurate decoder.
+
+    **Research question.** Where does flag information help when decoding
+    bivariate bicycle codes under circuit-level noise: as a switching trigger, as
+    decoder input, or not at all?
+
+    We answer it in three parts:
+
+    1. *As a trigger* — compare flag rules against the trivial rule "escalate when
+       the fast decoder fails", on identical shots (Experiments 4 and 6).
+    2. *As decoder input* — compare an unflagged circuit, a flagged circuit whose
+       flag outcomes are hidden from the decoder, and a flagged circuit whose
+       outcomes it reads (Experiment 2).
+    3. *Why* — measure how often flags fire and how much they tell us
+       (Experiments 1 and 3).
+
+    **What would falsify the trigger hypothesis.** If the fast decoder is never
+    confidently wrong, no trigger can improve accuracy; and if flags fire on almost
+    every shot, no trigger can be selective. Both are measured, not assumed.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 1b. Glossary
+
+    Every symbol that appears in a table or on an axis in this notebook.
+
+    | term | meaning |
+    |---|---|
+    | **n, k, d** | physical qubits, logical qubits, code distance: a code is written [[n, k, d]] |
+    | **p** | physical error rate: the probability parameter of every noise channel in the circuit |
+    | **T** | number of syndrome-extraction rounds in one shot (how long the memory is kept alive) |
+    | **shot** | one run of the experiment: prepare, run T rounds, measure, decode once |
+    | **detector** | a parity of measurements that is deterministic without noise; the decoder sees these, not raw measurements |
+    | **syndrome** | the vector of detector outcomes for one shot |
+    | **fault mechanism** | one independent error the noise model can produce, with its detector signature; the columns of H |
+    | **λ (lambda)** | expected number of fault mechanisms firing per shot = sum of all fault probabilities |
+    | **H** | detector-by-fault check matrix from the detector error model |
+    | **L** | observable-by-fault matrix: which logical observables each fault flips |
+    | **LER** | logical error rate: fraction of shots whose predicted observable flips differ from the truth |
+    | **converged** | the decoder found a correction that reproduces the syndrome exactly |
+    | **silent failure** | the weak decoder converged but was logically wrong: a confident mistake |
+    | **headroom** | silent failures of the weak decoder that the strong decoder gets right — the most accuracy any trigger could gain |
+    | **escalation rate** | fraction of shots sent to the strong decoder |
+    | **trigger / rule** | the condition for escalating: `primary_fail`, `flag>=k`, `rounds>=k`, `flag-only` |
+    | **work** | decoder-native operation count: detector visits for peeling, iterations for BP |
+    | **p50 / p99** | median and 99th-percentile decode time; p99 is the tail that a real-time decoder must meet |
+    | **Wilson interval** | 95% confidence interval for a rate, valid even at zero observed failures |
+    | **arm** | one leg of a controlled comparison: *unflagged*, *flagged blind*, *flagged sighted* |
+    | **blind / sighted** | whether the decoder is given the flag detectors (sighted) or they are removed from H (blind) |
+    | **r\*** | break-even cost ratio: the weak/strong cost ratio above which a flag rule would be cheaper |
+    | **T\*** | crossover: the round count at which flags stop paying for themselves |
+
+    **Decoder names.** `peel` greedy peeling · `BP-ms-N` min-sum belief propagation,
+    N iterations · `BP-ps-N` product-sum BP · `OSD-0` BP + ordered statistics,
+    order 0 · `OSD-CSk` / `LSD-CSk` combination sweep of order k · `LSD` localized
+    statistics decoding · `control-*` positive controls that fail silently on
+    purpose.
     """)
     return
 
@@ -642,14 +708,55 @@ def _(mo):
     **Flags:** one flag qubit per X-check ancilla; flag CNOTs bracket the middle
     of the extraction, so a mid-circuit ancilla fault flips the flag.
 
-    **TODO:** a circuit diagram for one X-check with its flag.
+    The schematic below is generated from the same conventions the builder uses.
     """)
     return
 
 
+@app.cell(hide_code=True)
+def _(plt):
+    def flag_circuit_diagram():
+        """Schematic of one X-check with its flag qubit (matches build_memory_circuit)."""
+        fig, ax = plt.subplots(figsize=(10, 3.4))
+        rows = {"X-ancilla": 5, "flag": 4, "data 1": 3, "data 2": 2, "...": 1, "data 6": 0}
+        for name, y in rows.items():
+            ax.plot([0, 13], [y, y], color="0.75", lw=1, zorder=0)
+            ax.text(-0.3, y, name, ha="right", va="center", fontsize=9)
+        ax.text(0.3, 5, "|+>", ha="center", va="center", fontsize=9)
+        steps = [(1.5, 3, "CX 1"), (3.5, 2, "CX 2"), (5.5, 1, "CX 3"),
+                 (7.5, 1, "CX 4"), (9.0, 1, "CX 5"), (10.5, 0, "CX 6")]
+        for x, y, label in steps:
+            ax.plot([x, x], [5, y], color="#1f77b4", lw=1.5, zorder=2)
+            ax.plot(x, 5, "o", color="#1f77b4", ms=7, zorder=3)
+            ax.plot(x, y, "o", mfc="white", mec="#1f77b4", ms=9, mew=1.5, zorder=3)
+            ax.text(x, 5.45, label, ha="center", fontsize=7, color="#1f77b4")
+        for x in (2.5, 9.75):                      # the two flag CNOTs
+            ax.plot([x, x], [5, 4], color="#d62728", lw=1.5, zorder=2)
+            ax.plot(x, 5, "o", color="#d62728", ms=7, zorder=3)
+            ax.plot(x, 4, "o", mfc="white", mec="#d62728", ms=9, mew=1.5, zorder=3)
+        ax.annotate("", xy=(9.75, 4.55), xytext=(2.5, 4.55),
+                    arrowprops=dict(arrowstyle="<->", color="#d62728", lw=1))
+        ax.text(6.1, 4.68, "an X fault on the ancilla in this window flips the flag",
+                ha="center", fontsize=8, color="#d62728")
+        for x, y in ((12.2, 5), (12.2, 4)):
+            ax.add_patch(plt.Rectangle((x - 0.35, y - 0.3), 0.7, 0.6, fc="white", ec="0.3"))
+            ax.text(x, y, "M", ha="center", va="center", fontsize=9)
+        ax.set_xlim(-2.2, 13.2)
+        ax.set_ylim(-0.6, 6.0)
+        ax.axis("off")
+        ax.set_title("One X-check with its flag qubit: ancilla is the CONTROL, so a mid-window "
+                     "ancilla fault spreads to the data qubits it has not yet touched",
+                     fontsize=9)
+        fig.tight_layout()
+        return fig
+
+    flag_circuit_diagram()
+    return (flag_circuit_diagram,)
+
+
 @app.cell
 def _(np, sp, stim):
-    def _check_schedule(H, lattice):
+    def check_schedule(H, lattice):
         """
         Order each check's data qubits by lattice offset.
 
@@ -680,14 +787,28 @@ def _(np, sp, stim):
         return np.array([[keyed_rows[r][key] for r in range(m)] for key in keys], dtype=np.int64)
 
 
-    def build_memory_circuit(code, rounds, p, use_flags=False, idle_noise=False):
+    def build_memory_circuit(code, rounds, p, use_flags=False, idle_noise=False,
+                             x_detectors=True):
         """
         Z-basis memory experiment for a CSS code under circuit-level noise.
 
         Detector order per round t: m_z Z-check detectors, m_x X-check detectors
-        (t >= 1 only), m_x flag detectors (if use_flags); then m_z final detectors.
+        (t >= 1 only, and only when x_detectors), m_x flag detectors (if use_flags);
+        then m_z final detectors.
         Schedule: all X-check CNOT layers, then all Z-check CNOT layers (always
         deterministic). Flag CNOTs sit after the first and before the last X layer.
+
+        x_detectors=False drops the X-check detectors. In a Z-BASIS memory the
+        observables are Z-type (rows of code.lz), so they are flipped by X errors
+        only. X checks detect Z errors, which can never flip those observables:
+        their detectors add a second, decoupled fault population that cannot cause
+        a logical failure but does inflate the DEM. For [[72,12,6]] at T=12 the
+        fault count goes 33,552 -> 4,392 (Theorem 1 of Pakhunov (2026) predicts
+        n(wT + T/2 + 1) = 3,096) and the mean fault-graph degree 1,356 -> 128.
+        Peeling is collision-limited, so the dense version cripples it: the
+        birthday bound exp(-d_bar*lambda^2 / 2N) gives 0.38 against 0.70.
+        Keep x_detectors=False for anything compared against the BB-code
+        literature, and for anything where decode time matters.
         """
         if rounds < 1:
             raise ValueError("rounds must be >= 1")
@@ -700,8 +821,8 @@ def _(np, sp, stim):
         flag = list(range(n + mx + mz, n + mx + mz + mx)) if use_flags else []
         all_q = data + xanc + zanc + flag
 
-        sx = _check_schedule(code.hx, code.lattice)   # (w_x, m_x)
-        sz = _check_schedule(code.hz, code.lattice)   # (w_z, m_z)
+        sx = check_schedule(code.hx, code.lattice)   # (w_x, m_x)
+        sz = check_schedule(code.hz, code.lattice)   # (w_z, m_z)
         if use_flags and sx.shape[0] < 2:
             raise ValueError("flags need X checks of weight >= 2")
 
@@ -778,7 +899,7 @@ def _(np, sp, stim):
             for i in range(mz):                                       # 1. Z checks
                 tg = [rec(z_idx[i])] + ([rec(prev_z[i])] if t > 0 else [])
                 c.append("DETECTOR", tg, [i, t, 0])
-            if t > 0:                                                 # 2. X checks
+            if x_detectors and t > 0:                                 # 2. X checks
                 for i in range(mx):
                     c.append("DETECTOR", [rec(x_idx[i]), rec(prev_x[i])], [i, t, 1])
             for i in range(len(f_idx)):                               # 3. flags
@@ -797,8 +918,12 @@ def _(np, sp, stim):
         return c
 
 
-    def flag_detector_mask(code, rounds, use_flags, num_detectors):
-        """Boolean array of length num_detectors, True exactly at flag detectors."""
+    def flag_detector_mask(code, rounds, use_flags, num_detectors, x_detectors=True):
+        """
+        Boolean array of length num_detectors, True exactly at flag detectors.
+        x_detectors must match the value the circuit was built with, or the mask
+        lands on the wrong detectors.
+        """
         mx, mz = code.hx.shape[0], code.hz.shape[0]
         mask = np.zeros(num_detectors, dtype=bool)
         if not use_flags:
@@ -806,18 +931,20 @@ def _(np, sp, stim):
         pos = 0
         for t in range(rounds):
             pos += mz                       # Z-check detectors
-            if t > 0:
+            if x_detectors and t > 0:
                 pos += mx                   # X-check detectors
             mask[pos:pos + mx] = True       # flag detectors
             pos += mx
         return mask
 
 
-    def expected_num_detectors(code, rounds, use_flags):
+    def expected_num_detectors(code, rounds, use_flags, x_detectors=True):
         """Detector count implied by the ordering contract above."""
         mx, mz = code.hx.shape[0], code.hz.shape[0]
         per_round_flags = mx if use_flags else 0
-        return mz * rounds + mx * (rounds - 1) + per_round_flags * rounds + mz
+        per_round_x = mx if x_detectors else 0
+        return (mz * rounds + per_round_x * (rounds - 1)
+                + per_round_flags * rounds + mz)
 
     return build_memory_circuit, expected_num_detectors, flag_detector_mask
 
@@ -933,6 +1060,46 @@ def _(
             assert noisy.num_detectors == expected_num_detectors(c, 2, flags)
             assert noisy.num_observables == c.k
 
+    def _z_only_is_silent_and_valid():
+        # x_detectors=False: still a correct circuit, just without the X-check
+        # detectors. Everything downstream must stay consistent with it.
+        c = _code()
+        for flags in (False, True):
+            clean = build_memory_circuit(c, _T, 0.0, use_flags=flags, x_detectors=False)
+            det, obs = clean.compile_detector_sampler(seed=11).sample(
+                32, separate_observables=True)
+            assert not det.any(), f"flags={flags}: Z-only detectors fire with p = 0"
+            assert not obs.any(), f"flags={flags}: Z-only observables flip with p = 0"
+            noisy = build_memory_circuit(c, _T, 1e-3, use_flags=flags, x_detectors=False)
+            noisy.detector_error_model(decompose_errors=False)   # must stay deterministic
+            assert noisy.num_detectors == expected_num_detectors(
+                c, _T, flags, x_detectors=False), f"flags={flags}: {noisy.num_detectors}"
+            assert noisy.num_observables == c.k
+
+    def _z_only_flag_mask():
+        c = _code()
+        mx = c.hx.shape[0]
+        circ = build_memory_circuit(c, _T, 1e-3, use_flags=True, x_detectors=False)
+        m = flag_detector_mask(c, _T, True, circ.num_detectors, x_detectors=False)
+        assert m.dtype == bool and m.shape == (circ.num_detectors,)
+        assert m.sum() == mx * _T
+        # the mask must still land only on flag detectors: with p = 0 they never fire
+        clean = build_memory_circuit(c, _T, 0.0, use_flags=True, x_detectors=False)
+        assert not clean.compile_detector_sampler(seed=12).sample(32)[:, m].any()
+
+    def _z_only_thins_the_dem():
+        # The point of the flag: X-check detectors carry a Z-error fault population
+        # that cannot flip a Z-type observable, so it is pure decoding overhead.
+        # Pakhunov (2026) Theorem 1 predicts n(wT + T/2 + 1) fault mechanisms.
+        c = _code()
+        theory = c.n * (3 * _T + _T / 2 + 1)
+        big = build_memory_circuit(c, _T, 1e-3, x_detectors=True)
+        small = build_memory_circuit(c, _T, 1e-3, x_detectors=False)
+        n_big = big.detector_error_model(decompose_errors=False).num_errors
+        n_small = small.detector_error_model(decompose_errors=False).num_errors
+        assert n_small < n_big / 3, f"Z-only DEM not thinned: {n_small} vs {n_big}"
+        assert n_small < 3 * theory, f"Z-only DEM still {n_small / theory:.1f}x theory"
+
     tests_circuit = run_checks([
         ("noiseless circuit: no detector fires, no observable flips", _noiseless_is_silent),
         ("noisy circuit yields a valid DEM (deterministic detectors)", _dem_builds),
@@ -943,6 +1110,11 @@ def _(
         ("data-qubit X errors never fire a flag detector", _data_errors_never_flag),
         ("every CX instruction is a true parallel layer (BB and GB)", _layers_are_parallel),
         ("circuit works for a weight-8 GB code", _gb_circuit),
+        ("x_detectors=False: silent at p = 0, valid DEM, counts agree",
+         _z_only_is_silent_and_valid),
+        ("x_detectors=False: flag mask still lands on flag detectors", _z_only_flag_mask),
+        ("x_detectors=False: DEM density drops toward the analytic fault count",
+         _z_only_thins_the_dem),
     ])
     render_checks("circuit", tests_circuit)
     return (tests_circuit,)
@@ -1381,10 +1553,10 @@ def _(mo):
     | `flag_or_fail` | same as `flag`; kept separate so ablations can differ |
 
     **Beating `always` is possible.** A policy can fail less than `always` when
-    the primary is right on shots where the secondary errs: E1 at 25,000 shots
+    the primary is right on shots where the secondary errs: Experiment 4 at 25,000 shots
     found peeling correct and BP+OSD-0 wrong on 14 shots, and never the reverse.
     So a policy beating `always` is not automatically a bug, but it must be
-    confirmed with a paired test on identical shots (E3 does this).
+    confirmed with a paired test on identical shots (Experiment 6 does this).
     """)
     return
 
@@ -1727,10 +1899,10 @@ def _(np, plt):
             b.plot(ps, [m.escalation_rate for m in ms], "s-", color=col[n], label=n)
         for ax in (a, b):
             ax.set_xscale("log")
-            ax.set_xlabel("physical error rate $p$")
+            ax.set_xlabel("physical error rate p (per noise channel)")
             ax.grid(True, which="both", alpha=0.3)
         a.set_yscale("log")
-        a.set_ylabel("logical error rate")
+        a.set_ylabel("logical error rate per shot")
         a.set_title("(a) accuracy (▽ = 95% upper bound, no failures)\n"
                     "points offset sideways slightly so overlaps stay visible", fontsize=10)
         b.set_ylim(-0.03, 1.03)
@@ -1763,7 +1935,8 @@ def _(np, plt):
                     f"{m.failures} fail ({m.silent_failures} silent)", va="center", fontsize=8)
         ax.set_yticks(y, names)
         ax.set_xlim(0, max(left.max() * 1.35, 1e-3))
-        ax.set_xlabel("fraction of shots")
+        ax.set_xlabel("fraction of shots that failed, split by category")
+        ax.set_ylabel("policy")
         ax.set_title("Where do failures come from?")
         ax.legend(fontsize=8, loc="lower right")
         ax.grid(True, axis="x", alpha=0.3)
@@ -1812,7 +1985,7 @@ def _(np, plt):
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel("p99 decode time (µs)")
-        ax.set_ylabel("logical error rate")
+        ax.set_ylabel("logical error rate per shot")
         ax.set_title("Accuracy vs tail latency — lower-left is better")
         ax.grid(True, which="both", alpha=0.3)
         fig.tight_layout()
@@ -2146,6 +2319,11 @@ def _(dataclass):
         use_flags: bool = True
         osd_order: int = 0
         workers: int = 1          # CPU processes used for decoding; 1 = sequential
+        # False (the default) drops the X-check detectors. A Z-basis memory has
+        # Z-type observables, which X-check detectors can never help predict, so
+        # keeping them multiplies the DEM by ~10x and cripples peeling. Set True
+        # only to reproduce the full two-basis detector contract of section 4.
+        x_detectors: bool = False
 
     return (ExperimentConfig,)
 
@@ -2254,7 +2432,7 @@ def _(mo):
 
     Every experiment writes two things into `results/`, next to this notebook:
 
-    - a **data file** (`.json` for E1/E2, `.npz` for E3) that the notebook can
+    - a **data file** (`.json`, or `.npz` for Experiment 6) that the notebook can
       reload later, so nothing is lost when you close it;
     - an **export folder** with the same name, holding every figure as PNG
       (for slides) and PDF (vector, for LaTeX), every table as CSV, and a
@@ -2421,8 +2599,8 @@ def _(
         ("results folder is absolute and next to the notebook", _results_dir_absolute),
         ("export writes PNG, PDF, CSV and report.md", _bundle_written),
         ("figures still display after being exported", _figures_still_display),
-        ("a reloaded E1 run keeps its per-shot samples", _e1_reload_keeps_latency),
-        ("an interrupted E3 run resumes with identical results", _interrupted_run_resumes),
+        ("a reloaded ablation run keeps its per-shot samples", _e1_reload_keeps_latency),
+        ("an interrupted zoo run resumes with identical results", _interrupted_run_resumes),
     ])
     mo.vstack([render_checks("export & resume", tests_export),
                mo.md(f"Results folder: `{RESULTS_DIR}`")])
@@ -2517,12 +2695,13 @@ def _(
     tests_dem,
     tests_experiments,
     tests_export,
+    tests_exp2,
     tests_gb,
     tests_gf2,
     tests_repro,
     tests_stats,
     tests_switch,
-    tests_zoo,
+    tests_exp6,
 ):
     _sections = [
         ("2. GF(2)", tests_gf2), ("3. BB codes", tests_codes), ("3. GB codes", tests_gb),
@@ -2530,8 +2709,9 @@ def _(
         ("6. Decoders", tests_decoders), ("7. Switch policies", tests_switch),
         ("8. Statistics", tests_stats), ("9. Reproducibility", tests_repro),
         ("9b. Export & resume", tests_export),
-        ("11. Experiment drivers", tests_experiments),
-        ("11b. Decoder zoo", tests_zoo),
+        ("11.2 Flag cost vs information", tests_exp2),
+        ("11.4-11.5 Experiment drivers", tests_experiments),
+        ("11.6 Decoder zoo", tests_exp6),
     ]
     _rows = ["| section | " + " | ".join(STATUS_ICON.values()) + " |",
              "|:--|--:|--:|--:|"]
@@ -2554,12 +2734,33 @@ def _(mo):
     mo.md(r"""
     ## 11. Experiments
 
-    **E1 — Ablation** at fixed $p$: compare all five triggers on the same shots.
-    The thesis claim lives in the gap between `primary_fail` and `flag`.
+    The six experiments run in the order below, and that is the order they are
+    laid out in: each one answers a question the next one depends on. The shared
+    configuration, drivers and saved-run loader are defined just above, so any
+    experiment can be run on its own.
 
-    **E2 — Noise sweep:** LER and escalation rate vs $p$ (log-spaced).
+    | § | | asks |
+    |--:|:--|:--|
+    | 11.1 | **Experiment 1 — validation** | does this pipeline reproduce known results, and what do the flags cost? |
+    | 11.2 | **Experiment 2 — flag cost vs information** | is the information the flags carry worth the hardware they need? |
+    | 11.3 | **Experiment 3 — trigger saturation** | does a block-level flag rule still discriminate as $T$ grows? |
+    | 11.4 | **Experiment 4 — trigger ablation** | all five triggers on the same shots, at one $p$ |
+    | 11.5 | **Experiment 5 — noise sweep** | logical error rate and escalation against $p$ |
+    | 11.6 | **Experiment 6 — decoder zoo** | every weak × strong pair against eight trigger rules |
 
-    **E3 — TODO:** your own, e.g. code size, rounds $T$, OSD order.
+    Experiment 1 comes first because nothing after it means anything if the
+    fault model is wrong: it is the check that this notebook's detector error
+    model matches the published one. Experiments 2 and 3 characterise the
+    trigger itself — what it costs and how much it discriminates — before
+    Experiments 4 and 6 spend hours measuring what it buys.
+
+    **Detector convention.** Every experiment defaults to `x_detectors=False`.
+    This is a Z-basis memory, so the observables are Z-type and only X errors
+    can flip them; X-check detectors report Z errors, which never can. Keeping
+    them multiplies the fault count by about ten, drives the mean fault-graph
+    degree from ~130 to ~1,400, and cripples peeling, which is collision-limited.
+    Section 4 documents the full two-basis contract, and the switch in the
+    configuration panel turns it back on when you want to reproduce it.
     """)
     return
 
@@ -2573,23 +2774,28 @@ def _(
 ):
     ui_code = mo.ui.dropdown(list(BB_PRESETS) + list(GB_PRESETS), value="[[72, 12, 6]]",
                              label="Code")
-    ui_rounds = mo.ui.slider(1, 12, value=6, label="Rounds T")
+    ui_rounds = mo.ui.slider(1, 24, value=6, step=1,
+                             label="Rounds T (syndrome-extraction rounds per shot)")
     ui_p = mo.ui.dropdown(["5e-4", "1e-3", "2e-3", "3e-3", "5e-3"], value="1e-3", label="p")
-    ui_shots = mo.ui.slider(100, 200_000, step=100, value=500, label="Shots")
+    ui_shots = mo.ui.number(start=100, stop=1_000_000, step=100, value=500,
+                            label="Shots (independent runs; ~100 failures needed to compare)")
     ui_flags = mo.ui.switch(value=True, label="Flag qubits")
-    ui_osd = mo.ui.slider(0, 4, value=0, label="OSD order")
-    ui_seed = mo.ui.number(value=20260921, label="Seed")
+    ui_osd = mo.ui.slider(0, 7, value=0, step=1,
+                          label="OSD order (0 fastest; >=2 is ~15x slower per shot)")
+    ui_seed = mo.ui.number(value=20260921, label="Seed (fixes which shots are sampled)")
     _cores = os.cpu_count() or 1
     ui_workers = mo.ui.slider(1, max(2, _cores), value=min(12, max(1, _cores - 4)),
                               label=f"CPU workers (of {_cores})")
+    ui_xdet = mo.ui.switch(value=False, label="X-check detectors (section 4 contract)")
     mo.vstack([mo.md("### Experiment configuration"),
                mo.hstack([ui_code, ui_p, ui_flags]),
                mo.hstack([ui_rounds, ui_shots]),
                mo.hstack([ui_osd, ui_seed]),
-               ui_workers,
+               mo.hstack([ui_workers, ui_xdet]),
                mo.md("*Decoding runs in parallel from about 2,000 shots upward; below that "
-                     "the per-process setup costs more than it saves.*")])
-    return ui_code, ui_flags, ui_osd, ui_p, ui_rounds, ui_seed, ui_shots, ui_workers
+                     "the per-process setup costs more than it saves.*"),
+               mo.md('*X-check detectors: off is the corrected model. A Z-basis memory has Z-type observables, so X-check detectors only ever report Z errors, which cannot flip those observables — keeping them multiplies the DEM by about 10x, cripples peeling and slows every decoder. Turn it on only to reproduce the full two-basis detector contract of section 4.*')])
+    return ui_code, ui_flags, ui_osd, ui_p, ui_rounds, ui_seed, ui_shots, ui_workers, ui_xdet
 
 
 @app.cell
@@ -2603,12 +2809,13 @@ def _(
     ui_seed,
     ui_shots,
     ui_workers,
+    ui_xdet,
 ):
     config = ExperimentConfig(
         code=ui_code.value, rounds=int(ui_rounds.value), p=float(ui_p.value),
         shots=int(ui_shots.value), seed=int(ui_seed.value),
         use_flags=bool(ui_flags.value), osd_order=int(ui_osd.value),
-        workers=int(ui_workers.value))
+        workers=int(ui_workers.value), x_detectors=bool(ui_xdet.value))
     return (config,)
 
 
@@ -2640,7 +2847,7 @@ def _(
 
     def run_ablation(config, keep_samples=True, on_chunk=None):
         """
-        E1. Decode every shot ONCE with the weak decoder (peeling) and once with the
+        Experiment 4. Decode every shot ONCE with the weak decoder (peeling) and once with the
         strong one (BP+OSD at config.osd_order), then derive one policy per trigger.
         This matches running SwitchPolicy on every shot -- the decoder-zoo tests
         check that shot by shot -- but it uses config.workers CPU processes and
@@ -2649,9 +2856,11 @@ def _(
         Returns dict trigger -> Metrics.
         """
         code = code_from_key(config.code)
-        circuit = build_memory_circuit(code, config.rounds, config.p, use_flags=config.use_flags)
+        circuit = build_memory_circuit(code, config.rounds, config.p, use_flags=config.use_flags,
+                                       x_detectors=config.x_detectors)
         H, L, priors = dem_to_matrices(circuit.detector_error_model(decompose_errors=False))
-        mask = flag_detector_mask(code, config.rounds, config.use_flags, circuit.num_detectors)
+        mask = flag_detector_mask(code, config.rounds, config.use_flags, circuit.num_detectors,
+                                  x_detectors=config.x_detectors)
         det, obs = circuit.compile_detector_sampler(seed=config.seed).sample(
             config.shots, separate_observables=True)
 
@@ -2689,10 +2898,10 @@ def _(
         return out
 
     def run_sweep(config, ps, keep_samples=False, progress=True):
-        """E2. run_ablation at each p in `ps`. Returns dict p -> (dict trigger -> Metrics)."""
+        """Experiment 5. run_ablation at each p in `ps`. Returns dict p -> (dict trigger -> Metrics)."""
         import dataclasses
         ps = [float(p) for p in ps]
-        steps = mo.status.progress_bar(ps, title="E2 sweep", show_eta=True) if progress else ps
+        steps = mo.status.progress_bar(ps, title="Experiment 5 sweep", show_eta=True) if progress else ps
         return {p: run_ablation(dataclasses.replace(config, p=p), keep_samples=keep_samples)
                 for p in steps}
 
@@ -2701,9 +2910,12 @@ def _(
         tag = config.code.strip("[]").replace(", ", "-").replace(" ", "")
         return os.path.join(RESULTS_DIR, f"{kind}_{tag}_T{config.rounds}_p{config.p:g}_"
                             f"{config.shots}shots_seed{config.seed}"
-                            f"{'_flags' if config.use_flags else ''}_osd{config.osd_order}.json")
+                            f"{'_flags' if config.use_flags else ''}_osd{config.osd_order}"
+                            f"{'_xdet' if config.x_detectors else ''}.json")
 
     return code_from_key, result_path, run_ablation, run_sweep
+
+
 @app.cell
 def _(
     BB_PRESETS,
@@ -2717,7 +2929,7 @@ def _(
     run_ablation,
     run_checks,
     run_sweep,
-    validation_run,
+    run_validation,
 ):
     _small = ExperimentConfig(code="[[72, 12, 6]]", rounds=2, p=2e-3, shots=20, seed=3)
 
@@ -2743,10 +2955,10 @@ def _(
         assert all(tuple(r) == TRIGGERS for r in sw.values())
 
     def _paths():
-        a = result_path("E1", _small)
-        assert a == result_path("E1", _small) and a.endswith(".json")
+        a = result_path("EXP4", _small)
+        assert a == result_path("EXP4", _small) and a.endswith(".json")
         import dataclasses
-        assert a != result_path("E1", dataclasses.replace(_small, p=3e-3)), \
+        assert a != result_path("EXP4", dataclasses.replace(_small, p=3e-3)), \
             "different configs must not share a file"
         assert code_from_key("[[48, 6, 8]]").n == 48
 
@@ -2758,7 +2970,7 @@ def _(
     def _validation_runs():
         import dataclasses
         cfg = dataclasses.replace(_small, rounds=2, shots=40)
-        v = validation_run(cfg, target=0.5)
+        v = run_validation(cfg, target=0.5)
         assert v["v1"]["our_faults"] > v["v1"]["our_faults_unflagged"] > 0, \
             "a flagged circuit must have more fault mechanisms"
         assert v["v1"]["ratio"] > 0
@@ -2770,7 +2982,7 @@ def _(
 
     tests_experiments = run_checks([
         ("reference fault-count formula n(wT + T/2 + 1)", _reference_formula),
-        ("E0 validation runs and reports V1, V2, V3", _validation_runs),
+        ("Experiment 1 runs and reports all three checks", _validation_runs),
         ("run_ablation returns every trigger, with sane escalation", _ablation_triggers),
         ("flag triggers are skipped when flags are off", _no_flags),
         ("run_ablation works on a GB code", _gb_code),
@@ -2782,56 +2994,996 @@ def _(
 
 
 @app.cell
+def _(RESULTS_DIR, glob, mo, os):
+    def saved_run_picker(prefix, label):
+        """Dropdown over the saved runs of one experiment, plus the file list."""
+        files = sorted(glob.glob(os.path.join(RESULTS_DIR, f"{prefix}_*.json")))
+        return mo.ui.dropdown({os.path.basename(f): f for f in files},
+                              value=os.path.basename(files[-1]) if files else None,
+                              label=label), files
+
+    return (saved_run_picker,)
+
+
+@app.cell
 def _(mo):
-    run_e1 = mo.ui.run_button(label="Run E1 — ablation")
-    run_e2 = mo.ui.run_button(label="Run E2 — sweep (slow)")
-    mo.hstack([run_e1, run_e2])
-    return run_e1, run_e2
+    import sys as _sys
+    _here = mo.notebook_dir()
+    _here = str(_here) if _here is not None else "."
+    if _here not in _sys.path:
+        _sys.path.insert(0, _here)
+    import decoder_zoo as dz
+    return (dz,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11.1 Experiment 1 — validation: does the pipeline reproduce known results, and what do flags cost?
+
+    A negative result is only believable if the setup could have found the effect.
+    Experiment 1 is the evidence for that, and it runs before any conclusion is drawn.
+
+    **Check 1 — how big is our fault model?** Pakhunov (2026) gives the number of DEM
+    fault mechanisms for a BB memory as $n(wT + T/2 + 1)$ under his noise model.
+    Ours uses full two-qubit depolarising noise, so it is denser. This check
+    reports the ratio, which tells you how far the two models are apart and
+    therefore how much of a published number you should expect to reproduce.
+
+    **Check 2 — do we reproduce a published number?** Enter a literature figure (for
+    example, peeling resolving 93.5% of shots on [[72, 12, 6]] at $p=10^{-3}$,
+    $T=12$) and this reports ours with a 95% interval and whether the two agree.
+    A disagreement is informative, not fatal: with Check 1 in hand you can say *why*.
+
+    **Check 3 — what do the flags cost?** Flag qubits add ancillas and CNOTs, so they
+    add noise. This decodes the same configuration with and without flags using
+    the same strong decoder and compares the logical error rates. If flags make
+    accuracy worse, a flag trigger has to buy back that loss before it can help.
+
+    *Important:* this section does not reimplement anyone else's noise model. It
+    measures the distance between ours and a published reference, which is what a
+    reader needs in order to weigh the rest of the thesis.
+    """)
+    return
 
 
 @app.cell
-def _(config, core_ready, mo, result_path, run_ablation, run_e1, save_results):
-    # Always define e1_run (None when not run), so the view cell can use either
-    # a fresh run or a loaded one.
-    e1_run = None
+def _(mo):
+    ui_exp1_target = mo.ui.number(0.0, 1.0, value=0.935, step=0.001,
+                                  label="Literature target: fraction of shots the weak decoder resolves")
+    ui_exp1_source = mo.ui.text(value="Pakhunov (2026), Table II, [[72,12,6]], p=1e-3, T=12",
+                              label="Source", full_width=True)
+    run_exp1 = mo.ui.run_button(label="Run Experiment 1 — validation")
+    mo.vstack([mo.hstack([ui_exp1_target, run_exp1]), ui_exp1_source,
+               mo.md("*Uses the shared configuration above (code, T, p, shots, workers). "
+                     "Set T and p to match the source you are comparing against.*")])
+    return run_exp1, ui_exp1_source, ui_exp1_target
+
+
+@app.cell
+def _(build_memory_circuit, code_from_key, dem_to_matrices, dz, flag_detector_mask, np, wilson):
+    def reference_fault_count(code, rounds):
+        """Pakhunov's count for a BB memory: n(wT + T/2 + 1), w = qubit degree."""
+        w = int(np.asarray(code.hx.sum(axis=0)).max())
+        return int(code.n * (w * rounds + rounds / 2 + 1))
+
+    def run_validation(config, target, on_chunk=None):
+        """All three checks on one configuration. Returns a dict of plain numbers."""
+        code = code_from_key(config.code)
+        out = {"code": config.code, "rounds": config.rounds, "p": config.p,
+               "shots": config.shots, "target": float(target),
+               "x_detectors": bool(config.x_detectors)}
+        arms = {}
+        for flags in (True, False):
+            circ = build_memory_circuit(code, config.rounds, config.p, use_flags=flags,
+                                        x_detectors=config.x_detectors)
+            H, L, pr = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
+            det, obs = circ.compile_detector_sampler(seed=config.seed).sample(
+                config.shots, separate_observables=True)
+            names = [("weak", {"kind": "peel"}),
+                     ("strong", {"kind": "osd", "osd_order": config.osd_order, "max_iter": 20})]
+            workers = dz.parallel_workers(config.shots, config.workers)
+            res, _ = dz.run_zoo(H, L, pr, det, obs, names, workers=workers,
+                                chunk_size=dz.chunk_for(config.shots, workers),
+                                on_chunk=on_chunk)
+            mask = flag_detector_mask(code, config.rounds, flags, circ.num_detectors,
+                                      x_detectors=config.x_detectors)
+            arms[flags] = dict(
+                faults=H.shape[1], detectors=circ.num_detectors,
+                flagged_fraction=float((det[:, mask].sum(1) > 0).mean()) if flags else 0.0,
+                weak_resolved=wilson(int(res["weak"]["conv"].sum()), config.shots),
+                weak_ler=wilson(int(res["weak"]["fail"].sum()), config.shots),
+                strong_ler=wilson(int(res["strong"]["fail"].sum()), config.shots),
+                silent=int((res["weak"]["conv"] & res["weak"]["fail"]).sum()))
+
+        # Check 1: how dense is our fault model compared with the reference formula?
+        ref = reference_fault_count(code, config.rounds)
+        out["v1"] = dict(reference_faults=ref, our_faults=arms[True]["faults"],
+                         our_faults_unflagged=arms[False]["faults"],
+                         ratio=arms[False]["faults"] / ref)
+        # Check 2: do we reproduce the published figure?
+        rate, lo, hi = arms[True]["weak_resolved"]
+        out["v2"] = dict(measured=rate, ci_low=lo, ci_high=hi, target=float(target),
+                         agrees=bool(lo <= target <= hi),
+                         measured_unflagged=arms[False]["weak_resolved"][0])
+        # Check 3: the cost of the flags (independent samples: different circuits)
+        f, uf = arms[True]["strong_ler"], arms[False]["strong_ler"]
+        if f[2] < uf[1]:
+            effect = "flags improve accuracy"
+        elif f[1] > uf[2]:
+            effect = "flags cost accuracy"
+        else:
+            effect = "no resolvable difference"
+        out["v3"] = dict(ler_flagged=f, ler_unflagged=uf, effect=effect,
+                         extra_faults=arms[True]["faults"] - arms[False]["faults"],
+                         extra_detectors=arms[True]["detectors"] - arms[False]["detectors"],
+                         flagged_fraction=arms[True]["flagged_fraction"],
+                         silent_flagged=arms[True]["silent"], silent_unflagged=arms[False]["silent"])
+        return out
+
+    return reference_fault_count, run_validation
+
+
+@app.cell
+def _(config, core_ready, mo, run_exp1, ui_exp1_target, run_validation):
+    exp1_result = None
     if not core_ready:
-        _out = mo.md("*E1 locked: finish the implementation (see §10).*")
-    elif not run_e1.value:
-        _out = mo.md("*Press **Run E1** to start, or load a previous run below.*")
+        _out = mo.md("*Experiment 1 locked until every test passes.*")
+    elif not run_exp1.value:
+        _out = mo.md("*Press **Run Experiment 1** to validate this configuration.*")
     else:
-        _res = run_ablation(config)
-        _path = save_results(result_path("E1", config), config, _res, include_samples=True)
-        e1_run = dict(config=config, results=_res, path=_path)
-        _out = mo.md(f"E1 finished. Saved to `{_path}`.")
+        _n_chunks = max(1, 2 * (-(-config.shots // 250)))
+        with mo.status.progress_bar(total=_n_chunks, title="Experiment 1: validating", show_eta=True) as _bar:
+            exp1_result = run_validation(config, ui_exp1_target.value, on_chunk=_bar.update)
+        _out = mo.md("Experiment 1 finished.")
     _out
-    return (e1_run,)
+    return (exp1_result,)
 
 
 @app.cell
-def _(RESULTS_DIR, e1_run, glob, mo, os):
-    _ = e1_run                                    # refresh the list after a new run
-    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "E1_*.json")))
-    ui_e1_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
-                                value=os.path.basename(_files[-1]) if _files else None,
-                                label="Previous E1 run")
-    load_e1_btn = mo.ui.run_button(label="Load E1")
-    mo.hstack([ui_e1_file, load_e1_btn]) if _files else mo.md("*No saved E1 runs yet.*")
-    return load_e1_btn, ui_e1_file
+def _(exp1_result, mo, saved_run_picker):
+    _ = exp1_result                            # re-list after a new run
+    ui_exp1_file, _f1 = saved_run_picker("EXP1", "Saved Experiment 1 run")
+    load_exp1_btn = mo.ui.run_button(label="Load Experiment 1")
+    mo.vstack([
+        mo.md("#### Load a saved Experiment 1 run"),
+        mo.hstack([ui_exp1_file, load_exp1_btn]) if _f1
+        else mo.md("*No saved Experiment 1 runs yet.*")])
+    return load_exp1_btn, ui_exp1_file
 
 
 @app.cell
-def _(load_e1_btn, load_results, ui_e1_file):
-    e1_loaded = None
-    if load_e1_btn.value and ui_e1_file.value:
-        _cfg, _res = load_results(ui_e1_file.value)
-        e1_loaded = dict(config=_cfg, results=_res, path=ui_e1_file.value)
-    return (e1_loaded,)
+def _(load_exp1_btn, read_result_file, ui_exp1_file):
+    exp1_loaded = None
+    if load_exp1_btn.value and ui_exp1_file.value:
+        _d = read_result_file(ui_exp1_file.value, "validation")
+        exp1_loaded = dict(_d["config"], path=ui_exp1_file.value,
+                           source=_d.get("source", ""), **_d["checks"])
+    return (exp1_loaded,)
 
 
 @app.cell
 def _(
-    e1_loaded,
-    e1_run,
+    RESULTS_DIR,
+    exp1_loaded,
+    exp1_result,
+    export_bundle,
+    mo,
+    os,
+    plt,
+    ui_exp1_source,
+    write_result_file,
+):
+    exp1_data = exp1_result if exp1_result is not None else exp1_loaded
+    mo.stop(exp1_data is None, mo.md("*Run Experiment 1, or load a saved run above.*"))
+    _v1, _v2, _v3 = exp1_data["v1"], exp1_data["v2"], exp1_data["v3"]
+    _source = exp1_data.get("source") or ui_exp1_source.value
+
+    _fig, (_a, _b) = plt.subplots(1, 2, figsize=(11, 4.2))
+    _a.bar([0], [_v2["measured"]], color="#1f77b4", width=0.5)
+    _a.errorbar([0], [_v2["measured"]],
+                yerr=[[_v2["measured"] - _v2["ci_low"]], [_v2["ci_high"] - _v2["measured"]]],
+                fmt="none", color="k", capsize=6)
+    _a.axhline(_v2["target"], color="#d62728", ls="--", label=f"literature: {_v2['target']:.3f}")
+    _a.set_xticks([0], ["this notebook"])
+    _a.set_ylim(0, 1)
+    _a.set_ylabel("fraction of shots the weak decoder resolves")
+    _a.set_title(f"Check 2 — {'agrees with' if _v2['agrees'] else 'differs from'} the published value")
+    _a.legend(fontsize=8)
+    for _i, (_lab, _m) in enumerate([("with flags", _v3["ler_flagged"]),
+                                     ("without flags", _v3["ler_unflagged"])]):
+        _b.errorbar([_i], [_m[0] if _m[0] > 0 else _m[2]],
+                    yerr=[[max(_m[0] - _m[1], 0)], [max(_m[2] - _m[0], 0)]],
+                    fmt="o" if _m[0] > 0 else "v", color="#2ca02c", capsize=6, ms=8)
+    _b.set_xticks([0, 1], ["with flags", "without flags"])
+    _b.set_yscale("log")
+    _b.set_xlim(-0.5, 1.5)
+    _b.set_ylabel("logical error rate per shot (strong decoder)")
+    _b.set_title(f"Check 3 — {_v3['effect']}")
+    _b.grid(True, which="both", axis="y", alpha=0.3)
+    _fig.tight_layout()
+
+    _rows = [
+        dict(check="Check 1: fault-model density", value=f"{_v1['ratio']:.1f}×",
+             detail=f"{_v1['our_faults_unflagged']:,} faults vs {_v1['reference_faults']:,} "
+                    f"from n(wT + T/2 + 1)"),
+        dict(check="Check 2: reproduces literature",
+             value="yes" if _v2["agrees"] else "no",
+             detail=f"ours {_v2['measured']:.3f} [{_v2['ci_low']:.3f}, {_v2['ci_high']:.3f}] "
+                    f"vs {_v2['target']:.3f} ({_source})"),
+        dict(check="Check 3: accuracy cost of flags", value=_v3["effect"],
+             detail=f"LER {_v3['ler_flagged'][0]:.2e} with flags vs "
+                    f"{_v3['ler_unflagged'][0]:.2e} without; "
+                    f"+{_v3['extra_faults']:,} faults, +{_v3['extra_detectors']} detectors; "
+                    f"flags fire on {_v3['flagged_fraction']:.1%} of shots"),
+        dict(check="silent failures (weak decoder)",
+             value=f"{_v3['silent_flagged']} flagged / {_v3['silent_unflagged']} unflagged",
+             detail="the only failures a flag trigger could ever catch"),
+    ]
+    _tag = exp1_data["code"].strip("[]").replace(", ", "-")
+    _path = write_result_file(
+        os.path.join(RESULTS_DIR, f"EXP1_{_tag}_T{exp1_data['rounds']}_p{exp1_data['p']:g}_"
+                                  f"{exp1_data['shots']}shots.json"),
+        {"kind": "validation",
+         "config": {k: exp1_data[k] for k in ("code", "rounds", "p", "shots", "target")},
+         "source": _source,
+         "checks": {k: exp1_data[k] for k in ("v1", "v2", "v3")}})
+    _folder = export_bundle(_path, f"Experiment 1 validation — {exp1_data['code']}, T={exp1_data['rounds']}, "
+                            f"p={exp1_data['p']}", {"validation": _fig}, {"checks": _rows},
+                            notes=f"Literature source: {ui_exp1_source.value}")
+    mo.vstack([
+        mo.md("### Experiment 1 — results"),
+        mo.md("| check | verdict | detail |\n|:--|:--|:--|\n"
+              + "\n".join(f"| {r['check']} | {r['value']} | {r['detail']} |" for r in _rows)),
+        mo.md(f"Saved to `{_path}` · exported to `{_folder}`"),
+        _fig,
+    ])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11.2 Experiment 2 — flag cost vs information
+
+
+    Flag qubits are not free: each one adds a qubit, two CNOTs per round and a
+    fault mechanism per round. Experiment 2 measures whether the information the
+    flags carry ever repays that cost, by decoding three arms on identical shots
+    (§11.2.1--§11.2.3) across a range of round counts $T$.
+
+    Shots are budgeted per $T$, not flat: the logical error rate grows roughly
+    linearly in $T$, so large $T$ needs fewer shots for the same number of
+    failures while costing more per shot. Each point is written to disk as soon
+    as it finishes, so an interrupted sweep keeps everything already computed.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 11.2.1 What the flag hardware costs, before any decoding
+
+    Qubits, two-qubit gates, detectors and fault mechanisms, with and without
+    flags. This is the overhead an architect weighs against the accuracy gain, and
+    it needs no simulation.
+    """)
+    return
+
+
+@app.cell
+def _(build_memory_circuit, dem_to_matrices, np):
+    def circuit_overhead(code, rounds, p, x_detectors=False):
+        """Qubit, gate, detector and fault counts for the flagged/unflagged circuits."""
+        out = {}
+        for flags in (False, True):
+            circ = build_memory_circuit(code, rounds, p, use_flags=flags,
+                                        x_detectors=x_detectors)
+            cx = sum(len(inst.targets_copy()) // 2 for inst in circ.flattened()
+                     if inst.name == "CX")
+            H, _L, priors = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
+            out[flags] = dict(qubits=circ.num_qubits, two_qubit_gates=cx,
+                              detectors=circ.num_detectors, faults=H.shape[1],
+                              expected_faults_per_shot=float(np.sum(priors)))
+        a, b = out[False], out[True]
+        return dict(unflagged=a, flagged=b,
+                    extra_qubits=b["qubits"] - a["qubits"],
+                    qubit_overhead=b["qubits"] / a["qubits"] - 1,
+                    gate_overhead=b["two_qubit_gates"] / a["two_qubit_gates"] - 1,
+                    fault_overhead=b["faults"] / a["faults"] - 1,
+                    lambda_overhead=(b["expected_faults_per_shot"]
+                                     / a["expected_faults_per_shot"] - 1))
+
+    return (circuit_overhead,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 11.2.2 The three-arm measurement
+
+    One function, used for every point in the sweep. The blind arm **removes** the
+    flag detector rows from the check matrix rather than zeroing those syndrome
+    bits: zeroing would hand the decoder a syndrome that never occurred.
+    """)
+    return
+
+
+@app.cell
+def _(
+    build_memory_circuit,
+    dem_to_matrices,
+    dz,
+    flag_detector_mask,
+    np,
+    wilson,
+):
+    ARMS = ("unflagged", "flagged, blind", "flagged, sighted")
+
+    def three_arm_run(code, rounds, p, shots, seed, workers=1, osd_order=0, on_chunk=None,
+                      x_detectors=False, checkpoint_dir=None):
+        """
+        LER of one strong decoder on the three arms, plus flag statistics.
+
+        checkpoint_dir: each arm gets its own subfolder, so an interrupted run
+        resumes chunk by chunk instead of starting the T over (see dz.run_zoo).
+        """
+        import os as _os
+        spec = [("strong", {"kind": "osd", "osd_order": osd_order, "max_iter": 20})]
+        w = dz.parallel_workers(shots, workers)
+
+        def decode(arm, H, L, priors, det, obs):
+            cdir = None
+            if checkpoint_dir:
+                cdir = _os.path.join(checkpoint_dir, f"T{rounds}_{arm}")
+            res, _ = dz.run_zoo(H, L, priors, det, obs, spec, workers=w,
+                                chunk_size=dz.chunk_for(shots, w, checkpoint=bool(cdir)),
+                                on_chunk=on_chunk, checkpoint_dir=cdir)
+            fails = int(res["strong"]["fail"].sum())
+            return fails, wilson(fails, shots), res["strong"]["fail"]
+
+        circ0 = build_memory_circuit(code, rounds, p, use_flags=False,
+                                     x_detectors=x_detectors)
+        H0, L0, pr0 = dem_to_matrices(circ0.detector_error_model(decompose_errors=False))
+        det0, obs0 = circ0.compile_detector_sampler(seed=seed).sample(
+            shots, separate_observables=True)
+
+        circ1 = build_memory_circuit(code, rounds, p, use_flags=True,
+                                     x_detectors=x_detectors)
+        H1, L1, pr1 = dem_to_matrices(circ1.detector_error_model(decompose_errors=False))
+        det1, obs1 = circ1.compile_detector_sampler(seed=seed).sample(
+            shots, separate_observables=True)
+        mask = flag_detector_mask(code, rounds, True, circ1.num_detectors,
+                                  x_detectors=x_detectors)
+        keep = ~mask
+
+        out = {}
+        out["unflagged"] = decode("unflagged", H0, L0, pr0, det0, obs0)
+        out["flagged, blind"] = decode("blind", H1[keep], L1, pr1, det1[:, keep], obs1)
+        out["flagged, sighted"] = decode("sighted", H1, L1, pr1, det1, obs1)
+
+        n_flags = det1[:, mask].sum(1)
+        return dict(
+            rounds=rounds, p=p, shots=shots, seed=seed, code=code.name,
+            x_detectors=bool(x_detectors),
+            arms={k: dict(failures=v[0], ler=v[1][0], ci_low=v[1][1], ci_high=v[1][2])
+                  for k, v in out.items()},
+            # paired within the flagged circuit: blind and sighted saw the same shots
+            blind_only_fail=int((out["flagged, blind"][2] & ~out["flagged, sighted"][2]).sum()),
+            sighted_only_fail=int((out["flagged, sighted"][2] & ~out["flagged, blind"][2]).sum()),
+            flagged_fraction=float((n_flags > 0).mean()),
+            mean_flags=float(n_flags.mean()),
+            detectors_flagged=int(circ1.num_detectors), detectors_unflagged=int(circ0.num_detectors))
+
+    return ARMS, three_arm_run
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### 11.2.3 Trend and crossover fit
+
+    Ratios of logical error rate to the unflagged arm. A ratio below 1 means flags
+    help. Fitting `ln(ratio)` linearly in T and solving for `ratio = 1` gives the
+    crossover T\*: the number of rounds beyond which flags stop paying.
+
+    The error bars on a ratio of two failure counts use the standard Poisson
+    approximation, `SE(ln r) ≈ sqrt(1/k₁ + 1/k₂)`, which needs a decent number of
+    failures per point — check the counts before quoting T\*.
+    """)
+    return
+
+
+@app.cell
+def _(np):
+    def ratio_to_unflagged(point, arm):
+        """Ratio of `arm` to the unflagged arm, with a log-scale standard error."""
+        k1 = point["arms"][arm]["failures"]
+        k0 = point["arms"]["unflagged"]["failures"]
+        if k0 == 0 or k1 == 0:
+            return float("nan"), float("nan")
+        return k1 / k0, float(np.sqrt(1.0 / k1 + 1.0 / k0))
+
+    def crossover_fit(points, arm="flagged, sighted"):
+        """
+        Weighted least squares of ln(ratio) against T. Returns slope, intercept and
+        the T where the fit crosses ratio = 1 (None when it never does).
+        """
+        rows = [(pt["rounds"], *ratio_to_unflagged(pt, arm)) for pt in points]
+        rows = [(t, r, se) for t, r, se in rows if np.isfinite(r) and np.isfinite(se) and se > 0]
+        if len(rows) < 2:
+            return dict(slope=float("nan"), intercept=float("nan"), crossover=None, n=len(rows))
+        T = np.array([r[0] for r in rows], float)
+        y = np.log([r[1] for r in rows])
+        w = 1.0 / np.array([r[2] for r in rows]) ** 2
+        A = np.vstack([np.ones_like(T), T]).T
+        W = np.diag(w)
+        coef = np.linalg.solve(A.T @ W @ A, A.T @ W @ y)
+        intercept, slope = float(coef[0]), float(coef[1])
+        cross = -intercept / slope if slope > 0 and intercept < 0 else None
+        return dict(slope=slope, intercept=intercept, crossover=cross, n=len(rows),
+                    T=T.tolist(), ratio=[r[1] for r in rows], se=[r[2] for r in rows])
+
+    return crossover_fit, ratio_to_unflagged
+
+
+@app.cell
+def _(
+    BB_PRESETS,
+    GB_PRESETS,
+    mo,
+    os,
+):
+    _cores = os.cpu_count() or 1
+    ui_exp2_code = mo.ui.dropdown(list(BB_PRESETS) + list(GB_PRESETS), value="[[72, 12, 6]]",
+                             label="Code")
+    ui_exp2_p = mo.ui.dropdown(["5e-4", "1e-3", "2e-3", "3e-3"], value="1e-3", label="p")
+    ui_exp2_rounds = mo.ui.multiselect(["3", "6", "9", "12", "18", "24"],
+                                  value=["6", "12", "18", "24"], label="Rounds T")
+    ui_exp2_shots = mo.ui.number(start=100, stop=500_000, step=100, value=20_000,
+                                 label="Shots per arm (each T costs three arms)")
+    ui_exp2_seed = mo.ui.number(value=20260923, label="Seed")
+    ui_exp2_osd = mo.ui.slider(0, 7, value=0, step=1, label="OSD order")
+    ui_exp2_workers = mo.ui.slider(1, max(2, _cores), value=min(12, max(1, _cores - 4)),
+                              label=f"CPU workers (of {_cores})")
+    ui_exp2_xdet = mo.ui.switch(value=False, label="X-check detectors")
+    ui_exp2_scale = mo.ui.switch(value=True, label="Scale shots as 1/T")
+    mo.vstack([mo.md("### Configuration"),
+               mo.hstack([ui_exp2_code, ui_exp2_p, ui_exp2_osd]),
+               ui_exp2_rounds,
+               mo.hstack([ui_exp2_shots, ui_exp2_seed, ui_exp2_workers]),
+               mo.hstack([ui_exp2_xdet, ui_exp2_scale]),
+               mo.md("*Each T costs three arms.*"),
+               mo.md("*Shots above is the budget for the SMALLEST T. With **scale shots as "
+                     "1/T** on, larger T gets proportionally fewer: the logical error rate "
+                     "grows roughly linearly in T, so large T needs fewer shots for the same "
+                     "number of failures, while costing more per shot. Flat shots spends the "
+                     "most compute exactly where it is least needed — scaling makes every "
+                     "point cost about the same and keeps the small-T error bars tight.*"),
+               mo.md("*X-check detectors off is the corrected model: in a Z-basis memory they "
+                     "can never help predict a Z-type observable, but they multiply the DEM by "
+                     "about 10x. Leave it off unless you are reproducing section 4 exactly.*")])
+    return (ui_exp2_code, ui_exp2_osd, ui_exp2_p, ui_exp2_rounds, ui_exp2_scale,
+            ui_exp2_seed, ui_exp2_shots, ui_exp2_workers, ui_exp2_xdet)
+
+
+@app.cell
+def _(ui_exp2_code, ui_exp2_osd, ui_exp2_p, ui_exp2_rounds, ui_exp2_scale, ui_exp2_seed,
+      ui_exp2_shots, ui_exp2_workers, ui_exp2_xdet):
+    exp2_config = dict(code=ui_exp2_code.value, p=float(ui_exp2_p.value),
+                      rounds=sorted(int(t) for t in ui_exp2_rounds.value),
+                      shots=int(ui_exp2_shots.value), seed=int(ui_exp2_seed.value),
+                      osd_order=int(ui_exp2_osd.value), workers=int(ui_exp2_workers.value),
+                      x_detectors=bool(ui_exp2_xdet.value),
+                      scale_shots=bool(ui_exp2_scale.value))
+
+    def exp2_shots_for(T, config=None):
+        """
+        Shots to run at T rounds.
+
+        `config["shots"]` is the budget for the smallest T in the sweep. The
+        logical error rate grows roughly linearly in T, so the shots needed for a
+        fixed number of failures fall as 1/T -- while the cost per shot rises with
+        T, because the DEM grows with it. Flat allocation therefore spends the most
+        time on the points that need the least; 1/T makes shots x T, the rough cost
+        of a point, about equal across the sweep. Floored at 2,000 so no point
+        becomes too small to resolve anything, and never above the budget.
+        """
+        config = exp2_config if config is None else config
+        base = int(config["shots"])
+        if not config.get("scale_shots", False) or not config["rounds"]:
+            return base
+        t_min = min(config["rounds"])
+        return int(min(base, max(2000, round(base * t_min / int(T)))))
+
+    return exp2_config, exp2_shots_for
+
+
+@app.cell
+def _(circuit_overhead, code_from_key, exp2_config, mo, core_ready):
+    mo.stop(not core_ready)
+    _code = code_from_key(exp2_config["code"])
+    _rows = []
+    for _T in exp2_config["rounds"]:
+        _o = circuit_overhead(_code, _T, exp2_config["p"],
+                              x_detectors=exp2_config["x_detectors"])
+        _rows.append(dict(rounds=_T, qubits_unflagged=_o["unflagged"]["qubits"],
+                          qubits_flagged=_o["flagged"]["qubits"],
+                          qubit_overhead=_o["qubit_overhead"],
+                          gate_overhead=_o["gate_overhead"],
+                          fault_overhead=_o["fault_overhead"],
+                          lambda_unflagged=_o["unflagged"]["expected_faults_per_shot"],
+                          lambda_flagged=_o["flagged"]["expected_faults_per_shot"]))
+    exp2_overhead = _rows
+    mo.vstack([
+        mo.md("### Cost of the flag hardware (no decoding)"),
+        mo.md("| T | qubits | +qubits | +2q gates | +fault mechanisms | λ unflagged → flagged |\n"
+              "|--:|--:|--:|--:|--:|--:|\n"
+              + "\n".join(f"| {r['rounds']} | {r['qubits_unflagged']} → {r['qubits_flagged']} | "
+                          f"{r['qubit_overhead']:+.0%} | {r['gate_overhead']:+.0%} | "
+                          f"{r['fault_overhead']:+.0%} | "
+                          f"{r['lambda_unflagged']:.2f} → {r['lambda_flagged']:.2f} |"
+                          for r in exp2_overhead)),
+        mo.md("*λ is the expected number of fault mechanisms firing per shot: the quantity "
+              "that actually drives the logical error rate.*"),
+    ])
+    return (exp2_overhead,)
+
+
+@app.cell
+def _(mo):
+    run_exp2 = mo.ui.run_button(label="Run Experiment 2 — flag cost vs information")
+    run_exp2
+    return (run_exp2,)
+
+
+@app.cell
+def _(
+    RESULTS_DIR,
+    code_from_key,
+    exp2_config,
+    exp2_shots_for,
+    json,
+    mo,
+    os,
+    core_ready,
+    run_exp2,
+    three_arm_run,
+    write_result_file,
+):
+    exp2_run = None
+    if not core_ready:
+        _out = mo.md("*Locked: `decoderSwitch.py` tests must pass first.*")
+    elif not run_exp2.value:
+        _out = mo.md("*Press **Run Experiment 2 — flag cost vs information**, or load a saved run below.*")
+    else:
+        _code = code_from_key(exp2_config["code"])
+        _tag = exp2_config["code"].strip("[]").replace(", ", "-")
+        _stem = (f"EXP2_{_tag}_p{exp2_config['p']:g}_{exp2_config['shots']}shots_"
+                 f"seed{exp2_config['seed']}_osd{exp2_config['osd_order']}"
+                 f"{'_xdet' if exp2_config['x_detectors'] else ''}"
+                 f"{'_scaled' if exp2_config['scale_shots'] else ''}")
+        _path = os.path.join(RESULTS_DIR, _stem + ".json")
+        _ckpt = os.path.join(RESULTS_DIR, "checkpoints", _stem)
+        _points = []
+        # Cost per T is roughly shots x T, so weight the bar by that rather than
+        # giving every T the same share: the ETA is meaningless otherwise.
+        _units = {T: exp2_shots_for(T) * T for T in exp2_config["rounds"]}
+        _total = sum(_units.values())
+        with mo.status.progress_bar(total=_total, title="three-arm sweep", show_eta=True) as _bar:
+            for _T in exp2_config["rounds"]:
+                _pt = three_arm_run(_code, _T, exp2_config["p"], exp2_shots_for(_T),
+                                    exp2_config["seed"], workers=exp2_config["workers"],
+                                    osd_order=exp2_config["osd_order"],
+                                    x_detectors=exp2_config["x_detectors"],
+                                    checkpoint_dir=_ckpt)
+                _points.append(_pt)
+                # Write after EVERY T. The sweep runs for hours, and a crash or an
+                # interrupt after the last point used to lose the whole run.
+                write_result_file(_path, {"kind": "exp2", "config": exp2_config,
+                                          "points": _points})
+                _bar.update(_units[_T])
+        exp2_run = dict(config=exp2_config, points=_points, path=_path)
+        _out = mo.md(f"Sweep finished. Saved to `{_path}`.")
+    _out
+    return (exp2_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, exp2_run, mo, os):
+    import glob as _glob
+    _ = exp2_run
+    _files = sorted(_glob.glob(os.path.join(RESULTS_DIR, "EXP2_*.json")))
+    ui_exp2_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+                                 value=os.path.basename(_files[-1]) if _files else None,
+                                 label="Saved Experiment 2 run")
+    load_exp2 = mo.ui.run_button(label="Load")
+    mo.hstack([ui_exp2_file, load_exp2]) if _files else mo.md("*No saved sweeps yet.*")
+    return load_exp2, ui_exp2_file
+
+
+@app.cell
+def _(load_exp2, read_result_file, ui_exp2_file):
+    exp2_loaded = None
+    if load_exp2.value and ui_exp2_file.value:
+        _d = read_result_file(ui_exp2_file.value, "exp2")
+        exp2_loaded = dict(config=_d["config"], points=_d["points"], path=ui_exp2_file.value)
+    return (exp2_loaded,)
+
+
+@app.cell
+def _(ARMS, crossover_fit, exp2_loaded, exp2_run, mo, np, plt, ratio_to_unflagged):
+    exp2_data = exp2_run if exp2_run is not None else exp2_loaded
+    mo.stop(exp2_data is None)
+    _pts = sorted(exp2_data["points"], key=lambda q: q["rounds"])
+    _fit_sighted = crossover_fit(_pts, "flagged, sighted")
+    _fit_blind = crossover_fit(_pts, "flagged, blind")
+
+    _fig, (_a, _b) = plt.subplots(1, 2, figsize=(12, 4.6))
+    _colours = {"unflagged": "#7f7f7f", "flagged, blind": "#d62728", "flagged, sighted": "#2ca02c"}
+    for _arm in ARMS:
+        _T = [q["rounds"] for q in _pts]
+        _y = [q["arms"][_arm]["ler"] for q in _pts]
+        _lo = [q["arms"][_arm]["ler"] - q["arms"][_arm]["ci_low"] for q in _pts]
+        _hi = [q["arms"][_arm]["ci_high"] - q["arms"][_arm]["ler"] for q in _pts]
+        _a.errorbar(_T, _y, yerr=[_lo, _hi], fmt="o-", color=_colours[_arm], capsize=4, label=_arm)
+    _a.set_yscale("log")
+    _a.set_xlabel("syndrome rounds T per shot")
+    _a.set_ylabel("logical error rate per shot")
+    _a.set_title(f"{exp2_data['config']['code']}, p = {exp2_data['config']['p']}, "
+                 f"{exp2_data['config']['shots']:,} shots/arm")
+    _a.grid(True, which="both", alpha=0.3)
+    _a.legend(fontsize=8)
+
+    for _arm, _fit in (("flagged, sighted", _fit_sighted), ("flagged, blind", _fit_blind)):
+        _r = [ratio_to_unflagged(q, _arm) for q in _pts]
+        _T = [q["rounds"] for q, (v, _s) in zip(_pts, _r) if np.isfinite(v)]
+        _v = [v for v, _s in _r if np.isfinite(v)]
+        _e = [v * s for v, s in _r if np.isfinite(v)]
+        _b.errorbar(_T, _v, yerr=_e, fmt="o", color=_colours[_arm], capsize=4, label=_arm)
+        if np.isfinite(_fit["slope"]):
+            _x = np.linspace(min(_T) - 1, max(max(_T) + 2, (_fit["crossover"] or 0) + 2), 50)
+            _b.plot(_x, np.exp(_fit["intercept"] + _fit["slope"] * _x), "--",
+                    color=_colours[_arm], lw=1)
+    _b.axhline(1.0, color="k", lw=0.8)
+    if _fit_sighted["crossover"]:
+        _b.axvline(_fit_sighted["crossover"], color="#2ca02c", ls=":", lw=1)
+        _b.annotate(f"T* ≈ {_fit_sighted['crossover']:.0f}",
+                    (_fit_sighted["crossover"], 1.0), textcoords="offset points",
+                    xytext=(6, 10), fontsize=9, color="#2ca02c")
+    _b.set_xlabel("syndrome rounds T per shot")
+    _b.set_ylabel("logical error rate ÷ unflagged")
+    _b.set_title("Below 1 = flags help. Dashed: weighted fit of ln(ratio) in T")
+    _b.grid(True, alpha=0.3)
+    _b.legend(fontsize=8)
+    _fig.tight_layout()
+    exp2_fig, exp2_fit = _fig, dict(sighted=_fit_sighted, blind=_fit_blind)
+    return exp2_data, exp2_fig, exp2_fit
+
+
+@app.cell
+def _(export_bundle, exp2_data, exp2_fig, exp2_fit, mo, exp2_overhead, ratio_to_unflagged):
+    _pts = sorted(exp2_data["points"], key=lambda q: q["rounds"])
+    _rows = []
+    for _q in _pts:
+        _rs, _ = ratio_to_unflagged(_q, "flagged, sighted")
+        _rb, _ = ratio_to_unflagged(_q, "flagged, blind")
+        _rows.append(dict(
+            rounds=_q["rounds"], shots=_q["shots"],
+            **{f"{_arm} failures": _q["arms"][_arm]["failures"] for _arm in _q["arms"]},
+            **{f"{_arm} LER": _q["arms"][_arm]["ler"] for _arm in _q["arms"]},
+            ratio_sighted=_rs, ratio_blind=_rb,
+            flagged_fraction=_q["flagged_fraction"], mean_flags=_q["mean_flags"],
+            blind_only_fail=_q["blind_only_fail"], sighted_only_fail=_q["sighted_only_fail"]))
+
+    _cross = exp2_fit["sighted"]["crossover"]
+    _headline = (
+        f"**Flags pay up to T\\* ≈ {_cross:.0f}** and cost accuracy beyond it "
+        f"(weighted fit, slope {exp2_fit['sighted']['slope']:+.3f} per round)."
+        if _cross else
+        "**No crossover within the fitted range**: on this fit the flagged-and-sighted arm "
+        "does not reach parity with the unflagged circuit over the T values measured.")
+    _lines = ["| T | unflagged | blind | sighted | sighted ÷ unflagged | flags fire on |",
+              "|--:|--:|--:|--:|--:|--:|"]
+    for _q, _r in zip(_pts, _rows):
+        _lines.append(f"| {_q['rounds']} | {_q['arms']['unflagged']['ler']:.3e} | "
+                      f"{_q['arms']['flagged, blind']['ler']:.3e} | "
+                      f"{_q['arms']['flagged, sighted']['ler']:.3e} | "
+                      f"{_r['ratio_sighted']:.2f}× | {_q['flagged_fraction']:.1%} |")
+    _folder = export_bundle(
+        exp2_data["path"],
+        f"Flag trade-off study — {exp2_data['config']['code']}, p = {exp2_data['config']['p']}",
+        {"three_arms_vs_rounds": exp2_fig},
+        {"points": _rows, "overhead": exp2_overhead},
+        notes=_headline)
+    mo.vstack([mo.md("### Results"), mo.md(_headline), mo.md("\n".join(_lines)),
+               mo.md(f"Data: `{exp2_data['path']}` · exported to `{_folder}`"), exp2_fig])
+    return
+
+
+@app.cell
+def _(
+    circuit_overhead,
+    code_from_key,
+    crossover_fit,
+    exp2_shots_for,
+    mo,
+    np,
+    ratio_to_unflagged,
+    render_checks,
+    run_checks,
+    three_arm_run,
+):
+    def _known_crossover_is_recovered():
+        """A synthetic ratio that crosses 1 at T = 20 must be fitted as T* ≈ 20."""
+        pts = []
+        for T in (4, 8, 12, 16):
+            ratio = np.exp(0.05 * (T - 20))          # crosses 1 exactly at T = 20
+            k0 = 400
+            pts.append(dict(rounds=T, arms={"unflagged": dict(failures=k0),
+                                            "flagged, sighted": dict(failures=int(k0 * ratio))}))
+        fit = crossover_fit(pts, "flagged, sighted")
+        assert abs(fit["crossover"] - 20) < 1.0, fit["crossover"]
+        assert fit["slope"] > 0
+
+    def _no_crossover_returns_none():
+        pts = [dict(rounds=T, arms={"unflagged": dict(failures=400),
+                                    "flagged, sighted": dict(failures=200)})
+               for T in (4, 8, 12)]
+        assert crossover_fit(pts, "flagged, sighted")["crossover"] is None, \
+            "a flat ratio below 1 has no crossover"
+
+    def _ratio_handles_zero_failures():
+        pt = dict(arms={"unflagged": dict(failures=0), "flagged, sighted": dict(failures=3)})
+        assert not np.isfinite(ratio_to_unflagged(pt, "flagged, sighted")[0])
+
+    def _overhead_counts_are_sane():
+        code = code_from_key("[[72, 12, 6]]")
+        o = circuit_overhead(code, 2, 1e-3)
+        mx = code.hx.shape[0]
+        assert o["extra_qubits"] == mx, f"one flag per X-check expected, got {o['extra_qubits']}"
+        assert o["gate_overhead"] > 0 and o["fault_overhead"] > 0
+        assert o["flagged"]["detectors"] > o["unflagged"]["detectors"]
+
+    def _three_arms_differ_only_as_intended():
+        code = code_from_key("[[72, 12, 6]]")
+        r = three_arm_run(code, 2, 3e-3, 120, seed=5, workers=1)
+        assert set(r["arms"]) == {"unflagged", "flagged, blind", "flagged, sighted"}
+        assert r["detectors_flagged"] > r["detectors_unflagged"]
+        assert 0.0 <= r["flagged_fraction"] <= 1.0
+        # blind and sighted decode the SAME shots, so their disagreement is paired
+        assert r["blind_only_fail"] + r["sighted_only_fail"] >= 0
+        for arm in r["arms"].values():
+            assert arm["ci_low"] <= arm["ler"] <= arm["ci_high"]
+
+    def _shot_schedule_equalises_cost():
+        cfg = dict(shots=20000, rounds=[6, 12, 18, 24], scale_shots=True)
+        got = {T: exp2_shots_for(T, cfg) for T in cfg["rounds"]}
+        assert got[6] == 20000, f"smallest T must keep the full budget, got {got[6]}"
+        assert all(got[a] >= got[b] for a, b in zip(cfg["rounds"], cfg["rounds"][1:])), got
+        # shots x T is the rough cost of a point: the schedule should level it
+        cost = [got[T] * T for T in cfg["rounds"]]
+        assert max(cost) / min(cost) < 1.15, f"cost per point not levelled: {cost}"
+        assert sum(cost) < 0.45 * sum(20000 * T for T in cfg["rounds"]), \
+            "schedule should cut total cost well below flat allocation"
+
+    def _shot_schedule_respects_switches():
+        flat = dict(shots=20000, rounds=[6, 12, 24], scale_shots=False)
+        assert all(exp2_shots_for(T, flat) == 20000 for T in flat["rounds"])
+        # the floor keeps a long-T point big enough to resolve anything at all
+        tiny = dict(shots=3000, rounds=[3, 24], scale_shots=True)
+        assert exp2_shots_for(24, tiny) == 2000, exp2_shots_for(24, tiny)
+
+    def _z_only_three_arm_run():
+        # the corrected DEM must still produce a well-formed three-arm point
+        code = code_from_key("[[72, 12, 6]]")
+        r = three_arm_run(code, 2, 3e-3, 120, seed=5, workers=1, x_detectors=False)
+        assert r["x_detectors"] is False
+        assert r["detectors_flagged"] > r["detectors_unflagged"]
+        big = three_arm_run(code, 2, 3e-3, 4, seed=5, workers=1, x_detectors=True)
+        assert r["detectors_unflagged"] < big["detectors_unflagged"], \
+            "dropping X-check detectors should shrink the detector count"
+        for arm in r["arms"].values():
+            assert arm["ci_low"] <= arm["ler"] <= arm["ci_high"]
+
+    tests_exp2 = run_checks([
+        ("crossover fit recovers a known T*", _known_crossover_is_recovered),
+        ("a ratio that never reaches 1 reports no crossover", _no_crossover_returns_none),
+        ("ratios with zero failures are not reported", _ratio_handles_zero_failures),
+        ("overhead accounting: one flag per X-check, more gates, more faults", _overhead_counts_are_sane),
+        ("three-arm run returns consistent arms and intervals", _three_arms_differ_only_as_intended),
+        ("1/T shot schedule levels the cost of each point", _shot_schedule_equalises_cost),
+        ("shot schedule honours the switch and the floor", _shot_schedule_respects_switches),
+        ("three-arm run works on the corrected (Z-only) DEM", _z_only_three_arm_run),
+    ])
+    render_checks("11.2 flag cost vs information", tests_exp2)
+    return (tests_exp2,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11.3 Experiment 3 — trigger saturation: does a flag rule survive more rounds?
+
+
+    A block-level trigger fires when **any** flag fires anywhere in the whole
+    $T$-round block, so it tests $m_x \cdot T$ detectors at once. If a single
+    flag fires with probability $q$, the block fires with probability
+    $1 - (1-q)^{m_x T}$, which goes to 1 as $T$ grows however small $q$ is.
+
+    This experiment measures that curve directly. It decodes nothing, so it runs
+    in seconds. A trigger that fires on nearly every shot escalates nearly every
+    shot, which is the mechanism behind a null result for the flag rules in
+    Experiments 4 and 6 -- and the argument for a *local* trigger instead.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    run_exp3 = mo.ui.run_button(label="Run Experiment 3 — trigger saturation (seconds)")
+    run_exp3
+    return (run_exp3,)
+
+
+@app.cell
+def _(
+    build_memory_circuit,
+    code_from_key,
+    config,
+    core_ready,
+    flag_detector_mask,
+    mo,
+    run_exp3,
+):
+    exp3_run = None
+    if core_ready and run_exp3.value:
+        _code = code_from_key(config.code)
+        _rows = []
+        for _T in (3, 6, 12, 18, 24):
+            _circ = build_memory_circuit(_code, _T, config.p, use_flags=True,
+                                         x_detectors=config.x_detectors)
+            _det = _circ.compile_detector_sampler(seed=config.seed).sample(2000)
+            _mask = flag_detector_mask(_code, _T, True, _circ.num_detectors,
+                                       x_detectors=config.x_detectors)
+            _bits = _det[:, _mask]
+            _rows.append(dict(rounds=_T, flag_detectors=int(_mask.sum()),
+                              fraction_any_flag=float((_bits.sum(1) > 0).mean()),
+                              mean_flags_per_shot=float(_bits.sum(1).mean())))
+        exp3_run = dict(code=config.code, p=config.p, shots=2000, rows=_rows)
+    mo.md("*Press **Run Experiment 3** — flag statistics only, no decoding, so it takes seconds.*"
+          if exp3_run is None else "Experiment 3 finished.")
+    return (exp3_run,)
+
+
+@app.cell
+def _(exp3_run, mo, saved_run_picker):
+    _ = exp3_run                               # re-list after a new run
+    ui_exp3_file, _f3 = saved_run_picker("EXP3", "Saved Experiment 3 run")
+    load_exp3_btn = mo.ui.run_button(label="Load Experiment 3")
+    mo.vstack([
+        mo.md("#### Load a saved Experiment 3 run"),
+        mo.hstack([ui_exp3_file, load_exp3_btn]) if _f3
+        else mo.md("*No saved Experiment 3 runs yet.*")])
+    return load_exp3_btn, ui_exp3_file
+
+
+@app.cell
+def _(load_exp3_btn, read_result_file, ui_exp3_file):
+    exp3_loaded = None
+    if load_exp3_btn.value and ui_exp3_file.value:
+        _d = read_result_file(ui_exp3_file.value, "validation")
+        exp3_loaded = dict(_d["config"], path=ui_exp3_file.value, rows=_d["checks"]["v5"])
+    return (exp3_loaded,)
+
+
+@app.cell
+def _(RESULTS_DIR, export_bundle, mo, os, plt, exp3_loaded, exp3_run, write_result_file):
+    exp3_data = exp3_run if exp3_run is not None else exp3_loaded
+    mo.stop(exp3_data is None, mo.md("*Run Experiment 3, or load a saved run above.*"))
+    _rows = exp3_data["rows"]
+    _fig, (_a, _b) = plt.subplots(1, 2, figsize=(11, 4))
+    _Ts = [r["rounds"] for r in _rows]
+    _a.plot(_Ts, [r["fraction_any_flag"] for r in _rows], "o-", color="#d62728")
+    _a.axhline(1.0, color="k", lw=0.7, ls=":")
+    _a.set_ylim(0, 1.05)
+    _a.set_xlabel("syndrome rounds T per shot")
+    _a.set_ylabel("fraction of shots with >=1 flag fired")
+    _a.set_title("'Any flag fired' saturates with T")
+    _b.plot(_Ts, [r["mean_flags_per_shot"] for r in _rows], "s-", color="#1f77b4")
+    _b.set_xlabel("syndrome rounds T per shot")
+    _b.set_ylabel("mean flag bits fired per shot")
+    _b.set_title("Flags fire in proportion to rounds")
+    for _ax in (_a, _b):
+        _ax.grid(True, alpha=0.3)
+    _fig.tight_layout()
+    _tag = exp3_data["code"].strip("[]").replace(", ", "-")
+    _path = write_result_file(
+        os.path.join(RESULTS_DIR, f"EXP3_{_tag}_p{exp3_data['p']:g}_flagrate.json"),
+        {"kind": "validation",
+         "config": dict(code=exp3_data["code"], p=exp3_data["p"], shots=exp3_data["shots"]),
+         "checks": {"v5": _rows}})
+    _folder = export_bundle(_path, f"Experiment 3 flag rate vs rounds — {exp3_data['code']}, p={exp3_data['p']}",
+                            {"flag_rate_vs_rounds": _fig}, {"flag_rate": _rows},
+                            notes="A trigger that fires on nearly every shot cannot discriminate; "
+                                  "this is the mechanism behind a null result for flag triggering.")
+    mo.vstack([mo.md("### Experiment 3 — results: does the trigger saturate?"),
+               mo.md("| T | flag detectors | shots with any flag | mean flags per shot |\n"
+                     "|--:|--:|--:|--:|\n"
+                     + "\n".join(f"| {r['rounds']} | {r['flag_detectors']} | "
+                                  f"{r['fraction_any_flag']:.1%} | {r['mean_flags_per_shot']:.2f} |"
+                                  for r in _rows)),
+               mo.md(f"Saved to `{_path}` · exported to `{_folder}`"), _fig])
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11.4 Experiment 4 — trigger ablation at fixed $p$
+
+
+    All five triggers on the same shots, at one noise level. The thesis claim
+    lives in the gap between `primary_fail` and `flag`: a pre-decode trigger can
+    only beat the trivial post-hoc rule on shots where the weak decoder is
+    **confidently wrong**, so the silent-failure count is the number to read
+    first. Every policy is scored on identical shots, so the comparison is
+    paired and the differences are exact.
+    """)
+    return
+
+
+@app.cell
+def _(mo):
+    run_exp4 = mo.ui.run_button(label="Run Experiment 4 — trigger ablation")
+    run_exp4
+    return (run_exp4,)
+
+
+@app.cell
+def _(config, core_ready, mo, result_path, run_ablation, run_exp4, save_results):
+    # Always define exp4_run (None when not run), so the view cell can use either
+    # a fresh run or a loaded one.
+    exp4_run = None
+    if not core_ready:
+        _out = mo.md("*Experiment 4 locked: finish the implementation (see §10).*")
+    elif not run_exp4.value:
+        _out = mo.md("*Press **Run Experiment 4** to start, or load a previous run below.*")
+    else:
+        _res = run_ablation(config)
+        _path = save_results(result_path("EXP4", config), config, _res, include_samples=True)
+        exp4_run = dict(config=config, results=_res, path=_path)
+        _out = mo.md(f"Experiment 4 finished. Saved to `{_path}`.")
+    _out
+    return (exp4_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, exp4_run, glob, mo, os):
+    _ = exp4_run                                    # refresh the list after a new run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "EXP4_*.json")))
+    ui_exp4_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+                                value=os.path.basename(_files[-1]) if _files else None,
+                                label="Saved Experiment 4 run")
+    load_exp4_btn = mo.ui.run_button(label="Load")
+    mo.hstack([ui_exp4_file, load_exp4_btn]) if _files else mo.md("*No saved Experiment 4 runs yet.*")
+    return load_exp4_btn, ui_exp4_file
+
+
+@app.cell
+def _(load_exp4_btn, load_results, ui_exp4_file):
+    exp4_loaded = None
+    if load_exp4_btn.value and ui_exp4_file.value:
+        _cfg, _res = load_results(ui_exp4_file.value)
+        exp4_loaded = dict(config=_cfg, results=_res, path=ui_exp4_file.value)
+    return (exp4_loaded,)
+
+
+@app.cell
+def _(
+    exp4_loaded,
+    exp4_run,
     export_bundle,
     metrics_rows,
     mo,
@@ -2840,7 +3992,7 @@ def _(
     plot_outcomes,
     plot_tradeoff,
 ):
-    _e1 = e1_run if e1_run is not None else e1_loaded
+    _e1 = exp4_run if exp4_run is not None else exp4_loaded
     mo.stop(_e1 is None)
     _cfg, _res = _e1["config"], _e1["results"]
     _always = _res.get("always")
@@ -2856,7 +4008,7 @@ def _(
              "tradeoff": plot_tradeoff(_res)}
     if all(m.samples is not None for m in _res.values()):
         _figs["latency"] = plot_latency(_res)
-    _title = f"E1 — {_cfg.code}, T={_cfg.rounds}, p={_cfg.p}, {_cfg.shots} shots"
+    _title = f"Experiment 4 — {_cfg.code}, T={_cfg.rounds}, p={_cfg.p}, {_cfg.shots} shots"
     _folder = export_bundle(_e1["path"], _title, dict(_figs),
                             {"metrics": metrics_rows(_res, **vars(_cfg))})
     mo.vstack([
@@ -2864,7 +4016,7 @@ def _(
         mo.md(_table),
         mo.md("> ℹ️ " + ", ".join(_beats) + " beat `always`. This is possible when the weak "
               "decoder is right where the strong one errs — confirm it with a paired test on "
-              "the same shots (E3) before reporting it.") if _beats else mo.md(""),
+              "the same shots (Experiment 6) before reporting it.") if _beats else mo.md(""),
         mo.md(f"Data: `{_e1['path']}` · **Exported** figures (PNG + PDF), CSV and report to "
               f"`{_folder}`"),
         *[_f for _f in _figs.values()],
@@ -2872,52 +4024,73 @@ def _(
     return
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11.5 Experiment 5 — noise sweep
+
+
+    Logical error rate and escalation rate against the physical error rate $p$.
+    Panel (b) is the one that decides the latency argument: as the escalation
+    rate approaches 1, a switching policy is doing the strong decoder's work on
+    every shot and has no latency advantage left to claim.
+    """)
+    return
+
+
 @app.cell
-def _(config, core_ready, mo, np, result_path, run_e2, run_sweep, save_sweep):
-    e2_run = None
+def _(mo):
+    run_exp5 = mo.ui.run_button(label="Run Experiment 5 — noise sweep (slow)")
+    run_exp5
+    return (run_exp5,)
+
+
+@app.cell
+def _(config, core_ready, mo, np, result_path, run_exp5, run_sweep, save_sweep):
+    exp5_run = None
     if not core_ready:
-        _out = mo.md("*E2 locked: finish the implementation (see §10).*")
-    elif not run_e2.value:
-        _out = mo.md("*Press **Run E2** to start, or load a previous run below.*")
+        _out = mo.md("*Experiment 5 locked: finish the implementation (see §10).*")
+    elif not run_exp5.value:
+        _out = mo.md("*Press **Run Experiment 5** to start, or load a previous run below.*")
     else:
         _ps = np.logspace(np.log10(5e-4), np.log10(6e-3), 6)
         _sweep = run_sweep(config, _ps)
-        _path = save_sweep(result_path("E2", config), config, _sweep)
-        e2_run = dict(config=config, sweep=_sweep, path=_path)
-        _out = mo.md(f"E2 finished. Saved to `{_path}`.")
+        _path = save_sweep(result_path("EXP5", config), config, _sweep)
+        exp5_run = dict(config=config, sweep=_sweep, path=_path)
+        _out = mo.md(f"Experiment 5 finished. Saved to `{_path}`.")
     _out
-    return (e2_run,)
+    return (exp5_run,)
 
 
 @app.cell
-def _(RESULTS_DIR, e2_run, glob, mo, os):
-    _ = e2_run
-    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "E2_*.json")))
-    ui_e2_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+def _(RESULTS_DIR, exp5_run, glob, mo, os):
+    _ = exp5_run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "EXP5_*.json")))
+    ui_exp5_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
                                 value=os.path.basename(_files[-1]) if _files else None,
-                                label="Previous E2 run")
-    load_e2_btn = mo.ui.run_button(label="Load E2")
-    mo.hstack([ui_e2_file, load_e2_btn]) if _files else mo.md("*No saved E2 runs yet.*")
-    return load_e2_btn, ui_e2_file
+                                label="Saved Experiment 5 run")
+    load_exp5_btn = mo.ui.run_button(label="Load")
+    mo.hstack([ui_exp5_file, load_exp5_btn]) if _files else mo.md("*No saved Experiment 5 runs yet.*")
+    return load_exp5_btn, ui_exp5_file
 
 
 @app.cell
-def _(load_e2_btn, load_sweep, ui_e2_file):
-    e2_loaded = None
-    if load_e2_btn.value and ui_e2_file.value:
-        _cfg, _sweep = load_sweep(ui_e2_file.value)
-        e2_loaded = dict(config=_cfg, sweep=_sweep, path=ui_e2_file.value)
-    return (e2_loaded,)
+def _(load_exp5_btn, load_sweep, ui_exp5_file):
+    exp5_loaded = None
+    if load_exp5_btn.value and ui_exp5_file.value:
+        _cfg, _sweep = load_sweep(ui_exp5_file.value)
+        exp5_loaded = dict(config=_cfg, sweep=_sweep, path=ui_exp5_file.value)
+    return (exp5_loaded,)
 
 
 @app.cell
-def _(e2_loaded, e2_run, export_bundle, metrics_rows, mo, plot_sweep):
-    _e2 = e2_run if e2_run is not None else e2_loaded
+def _(exp5_loaded, exp5_run, export_bundle, metrics_rows, mo, plot_sweep):
+    _e2 = exp5_run if exp5_run is not None else exp5_loaded
     mo.stop(_e2 is None)
     _cfg, _sweep = _e2["config"], _e2["sweep"]
     _rows = [r for _p, _res in _sweep.items() for r in metrics_rows(_res, p=_p)]
     _fig = plot_sweep(_sweep)
-    _title = f"E2 — {_cfg.code}, T={_cfg.rounds}, {_cfg.shots} shots/point"
+    _title = f"Experiment 5 — {_cfg.code}, T={_cfg.rounds}, {_cfg.shots} shots/point"
     _folder = export_bundle(_e2["path"], _title, {"sweep": plot_sweep(_sweep)},
                             {"sweep_metrics": _rows})
     mo.vstack([mo.md(f"### {_title}"),
@@ -2928,489 +4101,11 @@ def _(e2_loaded, e2_run, export_bundle, metrics_rows, mo, plot_sweep):
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    ## 11a. E0 — validation, and what the flags cost
+    ## 11.6 Experiment 6 — decoder zoo: is a flag trigger viable for any decoder pair?
 
-    A negative result is only believable if the setup could have found the effect.
-    E0 is the evidence for that, and it runs before any conclusion is drawn.
-
-    **V1 — how big is our fault model?** Pakhunov (2026) gives the number of DEM
-    fault mechanisms for a BB memory as $n(wT + T/2 + 1)$ under his noise model.
-    Ours uses full two-qubit depolarising noise, so it is denser. This check
-    reports the ratio, which tells you how far the two models are apart and
-    therefore how much of a published number you should expect to reproduce.
-
-    **V2 — do we reproduce a published number?** Enter a literature figure (for
-    example, peeling resolving 93.5% of shots on [[72, 12, 6]] at $p=10^{-3}$,
-    $T=12$) and this reports ours with a 95% interval and whether the two agree.
-    A disagreement is informative, not fatal: with V1 in hand you can say *why*.
-
-    **V3 — what do the flags cost?** Flag qubits add ancillas and CNOTs, so they
-    add noise. This decodes the same configuration with and without flags using
-    the same strong decoder and compares the logical error rates. If flags make
-    accuracy worse, a flag trigger has to buy back that loss before it can help.
-
-    *Important:* this section does not reimplement anyone else's noise model. It
-    measures the distance between ours and a published reference, which is what a
-    reader needs in order to weigh the rest of the thesis.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    ui_v2_target = mo.ui.number(0.0, 1.0, value=0.935, step=0.001,
-                                label="Literature target: fraction of shots the weak decoder resolves")
-    ui_v2_source = mo.ui.text(value="Pakhunov (2026), Table II, [[72,12,6]], p=1e-3, T=12",
-                              label="Source", full_width=True)
-    run_e0 = mo.ui.run_button(label="Run E0 — validation")
-    mo.vstack([mo.hstack([ui_v2_target, run_e0]), ui_v2_source,
-               mo.md("*Uses the E1 configuration above (code, T, p, shots, workers). "
-                     "Set T and p to match the source you are comparing against.*")])
-    return run_e0, ui_v2_source, ui_v2_target
-
-
-@app.cell
-def _(build_memory_circuit, code_from_key, dem_to_matrices, dz, flag_detector_mask, np, wilson):
-    def reference_fault_count(code, rounds):
-        """Pakhunov's count for a BB memory: n(wT + T/2 + 1), w = qubit degree."""
-        w = int(np.asarray(code.hx.sum(axis=0)).max())
-        return int(code.n * (w * rounds + rounds / 2 + 1))
-
-    def validation_run(config, target, on_chunk=None):
-        """V1, V2 and V3 on one configuration. Returns a dict of plain numbers."""
-        code = code_from_key(config.code)
-        out = {"code": config.code, "rounds": config.rounds, "p": config.p,
-               "shots": config.shots, "target": float(target)}
-        arms = {}
-        for flags in (True, False):
-            circ = build_memory_circuit(code, config.rounds, config.p, use_flags=flags)
-            H, L, pr = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
-            det, obs = circ.compile_detector_sampler(seed=config.seed).sample(
-                config.shots, separate_observables=True)
-            names = [("weak", {"kind": "peel"}),
-                     ("strong", {"kind": "osd", "osd_order": config.osd_order, "max_iter": 20})]
-            workers = dz.parallel_workers(config.shots, config.workers)
-            res, _ = dz.run_zoo(H, L, pr, det, obs, names, workers=workers,
-                                chunk_size=dz.chunk_for(config.shots, workers),
-                                on_chunk=on_chunk)
-            mask = flag_detector_mask(code, config.rounds, flags, circ.num_detectors)
-            arms[flags] = dict(
-                faults=H.shape[1], detectors=circ.num_detectors,
-                flagged_fraction=float((det[:, mask].sum(1) > 0).mean()) if flags else 0.0,
-                weak_resolved=wilson(int(res["weak"]["conv"].sum()), config.shots),
-                weak_ler=wilson(int(res["weak"]["fail"].sum()), config.shots),
-                strong_ler=wilson(int(res["strong"]["fail"].sum()), config.shots),
-                silent=int((res["weak"]["conv"] & res["weak"]["fail"]).sum()))
-
-        # V1: how dense is our fault model compared with the reference formula?
-        ref = reference_fault_count(code, config.rounds)
-        out["v1"] = dict(reference_faults=ref, our_faults=arms[True]["faults"],
-                         our_faults_unflagged=arms[False]["faults"],
-                         ratio=arms[False]["faults"] / ref)
-        # V2: do we reproduce the published figure?
-        rate, lo, hi = arms[True]["weak_resolved"]
-        out["v2"] = dict(measured=rate, ci_low=lo, ci_high=hi, target=float(target),
-                         agrees=bool(lo <= target <= hi),
-                         measured_unflagged=arms[False]["weak_resolved"][0])
-        # V3: the cost of the flags (independent samples: different circuits)
-        f, uf = arms[True]["strong_ler"], arms[False]["strong_ler"]
-        if f[2] < uf[1]:
-            effect = "flags improve accuracy"
-        elif f[1] > uf[2]:
-            effect = "flags cost accuracy"
-        else:
-            effect = "no resolvable difference"
-        out["v3"] = dict(ler_flagged=f, ler_unflagged=uf, effect=effect,
-                         extra_faults=arms[True]["faults"] - arms[False]["faults"],
-                         extra_detectors=arms[True]["detectors"] - arms[False]["detectors"],
-                         flagged_fraction=arms[True]["flagged_fraction"],
-                         silent_flagged=arms[True]["silent"], silent_unflagged=arms[False]["silent"])
-        return out
-
-    return reference_fault_count, validation_run
-
-
-@app.cell
-def _(config, core_ready, mo, run_e0, ui_v2_target, validation_run):
-    e0_result = None
-    if not core_ready:
-        _out = mo.md("*E0 locked until every test passes.*")
-    elif not run_e0.value:
-        _out = mo.md("*Press **Run E0** to validate this configuration.*")
-    else:
-        _n_chunks = max(1, 2 * (-(-config.shots // 250)))
-        with mo.status.progress_bar(total=_n_chunks, title="E0: validating", show_eta=True) as _bar:
-            e0_result = validation_run(config, ui_v2_target.value, on_chunk=_bar.update)
-        _out = mo.md("E0 finished.")
-    _out
-    return (e0_result,)
-
-
-@app.cell
-def _(RESULTS_DIR, e0_result, glob, mo, os, v4_result):
-    _ = (e0_result, v4_result)               # re-list after a new run
-
-    def _picker(prefix, label):
-        files = sorted(glob.glob(os.path.join(RESULTS_DIR, f"{prefix}_*.json")))
-        return mo.ui.dropdown({os.path.basename(f): f for f in files},
-                              value=os.path.basename(files[-1]) if files else None,
-                              label=label), files
-
-    ui_e0_file, _f0 = _picker("E0", "Saved E0 run")
-    ui_v4_file, _f4 = _picker("V4", "Saved V4 run")
-    ui_v5_file, _f5 = _picker("V5", "Saved V5 run")
-    load_e0_btn = mo.ui.run_button(label="Load E0")
-    load_v4_btn = mo.ui.run_button(label="Load V4")
-    load_v5_btn = mo.ui.run_button(label="Load V5")
-    mo.vstack([mo.md("#### Load a saved validation run"),
-               mo.hstack([ui_e0_file, load_e0_btn]) if _f0 else mo.md("*No saved E0 runs yet.*"),
-               mo.hstack([ui_v4_file, load_v4_btn]) if _f4 else mo.md("*No saved V4 runs yet.*"),
-               mo.hstack([ui_v5_file, load_v5_btn]) if _f5 else mo.md("*No saved V5 runs yet.*")])
-    return (
-        load_e0_btn,
-        load_v4_btn,
-        load_v5_btn,
-        ui_e0_file,
-        ui_v4_file,
-        ui_v5_file,
-    )
-
-
-@app.cell
-def _(load_e0_btn, load_v4_btn, load_v5_btn, read_result_file, ui_e0_file, ui_v4_file, ui_v5_file):
-    # Each loader returns None until its button is pressed, so the display cells can
-    # take whichever of (fresh run, loaded file) exists.
-    e0_loaded = v4_loaded = v5_loaded = None
-    if load_e0_btn.value and ui_e0_file.value:
-        _d = read_result_file(ui_e0_file.value, "validation")
-        e0_loaded = dict(_d["config"], path=ui_e0_file.value, source=_d.get("source", ""),
-                         **_d["checks"])
-    if load_v4_btn.value and ui_v4_file.value:
-        _d = read_result_file(ui_v4_file.value, "validation")
-        v4_loaded = dict(_d["config"], path=ui_v4_file.value, arms=_d["checks"]["v4"])
-    if load_v5_btn.value and ui_v5_file.value:
-        _d = read_result_file(ui_v5_file.value, "validation")
-        v5_loaded = dict(_d["config"], path=ui_v5_file.value, rows=_d["checks"]["v5"])
-    return e0_loaded, v4_loaded, v5_loaded
-
-
-@app.cell
-def _(
-    RESULTS_DIR,
-    e0_loaded,
-    e0_result,
-    export_bundle,
-    mo,
-    os,
-    plt,
-    ui_v2_source,
-    write_result_file,
-):
-    e0_data = e0_result if e0_result is not None else e0_loaded
-    mo.stop(e0_data is None, mo.md("*Run E0, or load a saved run above.*"))
-    _v1, _v2, _v3 = e0_data["v1"], e0_data["v2"], e0_data["v3"]
-    _source = e0_data.get("source") or ui_v2_source.value
-
-    _fig, (_a, _b) = plt.subplots(1, 2, figsize=(11, 4.2))
-    _a.bar([0], [_v2["measured"]], color="#1f77b4", width=0.5)
-    _a.errorbar([0], [_v2["measured"]],
-                yerr=[[_v2["measured"] - _v2["ci_low"]], [_v2["ci_high"] - _v2["measured"]]],
-                fmt="none", color="k", capsize=6)
-    _a.axhline(_v2["target"], color="#d62728", ls="--", label=f"literature: {_v2['target']:.3f}")
-    _a.set_xticks([0], ["this notebook"])
-    _a.set_ylim(0, 1)
-    _a.set_ylabel("fraction of shots resolved by the weak decoder")
-    _a.set_title(f"V2 — {'agrees with' if _v2['agrees'] else 'differs from'} the published value")
-    _a.legend(fontsize=8)
-    for _i, (_lab, _m) in enumerate([("with flags", _v3["ler_flagged"]),
-                                     ("without flags", _v3["ler_unflagged"])]):
-        _b.errorbar([_i], [_m[0] if _m[0] > 0 else _m[2]],
-                    yerr=[[max(_m[0] - _m[1], 0)], [max(_m[2] - _m[0], 0)]],
-                    fmt="o" if _m[0] > 0 else "v", color="#2ca02c", capsize=6, ms=8)
-    _b.set_xticks([0, 1], ["with flags", "without flags"])
-    _b.set_yscale("log")
-    _b.set_xlim(-0.5, 1.5)
-    _b.set_ylabel("logical error rate (strong decoder)")
-    _b.set_title(f"V3 — {_v3['effect']}")
-    _b.grid(True, which="both", axis="y", alpha=0.3)
-    _fig.tight_layout()
-
-    _rows = [
-        dict(check="V1 fault-model density", value=f"{_v1['ratio']:.1f}×",
-             detail=f"{_v1['our_faults_unflagged']:,} faults vs {_v1['reference_faults']:,} "
-                    f"from n(wT + T/2 + 1)"),
-        dict(check="V2 reproduces literature",
-             value="yes" if _v2["agrees"] else "no",
-             detail=f"ours {_v2['measured']:.3f} [{_v2['ci_low']:.3f}, {_v2['ci_high']:.3f}] "
-                    f"vs {_v2['target']:.3f} ({_source})"),
-        dict(check="V3 cost of flags", value=_v3["effect"],
-             detail=f"LER {_v3['ler_flagged'][0]:.2e} with flags vs "
-                    f"{_v3['ler_unflagged'][0]:.2e} without; "
-                    f"+{_v3['extra_faults']:,} faults, +{_v3['extra_detectors']} detectors; "
-                    f"flags fire on {_v3['flagged_fraction']:.1%} of shots"),
-        dict(check="silent failures (weak decoder)",
-             value=f"{_v3['silent_flagged']} flagged / {_v3['silent_unflagged']} unflagged",
-             detail="the only failures a flag trigger could ever catch"),
-    ]
-    _tag = e0_data["code"].strip("[]").replace(", ", "-")
-    _path = write_result_file(
-        os.path.join(RESULTS_DIR, f"E0_{_tag}_T{e0_data['rounds']}_p{e0_data['p']:g}_"
-                                  f"{e0_data['shots']}shots.json"),
-        {"kind": "validation",
-         "config": {k: e0_data[k] for k in ("code", "rounds", "p", "shots", "target")},
-         "source": _source,
-         "checks": {k: e0_data[k] for k in ("v1", "v2", "v3")}})
-    _folder = export_bundle(_path, f"E0 validation — {e0_data['code']}, T={e0_data['rounds']}, "
-                            f"p={e0_data['p']}", {"validation": _fig}, {"checks": _rows},
-                            notes=f"Literature source: {ui_v2_source.value}")
-    mo.vstack([
-        mo.md("### E0 — validation results"),
-        mo.md("| check | verdict | detail |\n|:--|:--|:--|\n"
-              + "\n".join(f"| {r['check']} | {r['value']} | {r['detail']} |" for r in _rows)),
-        mo.md(f"Saved to `{_path}` · exported to `{_folder}`"),
-        _fig,
-    ])
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ### V4 — why do flags help? Hardening or information?
-
-    If E0's V3 shows flags improving accuracy, there are two possible reasons and
-    they mean very different things:
-
-    - **Circuit hardening.** The flag CNOTs shorten the window in which an ancilla
-      fault can spread, so fewer hook errors reach the data. This is the classic
-      flag-qubit mechanism (Chao & Reichardt).
-    - **Extra information.** The flagged circuit simply hands the decoder 432 more
-      detectors, and a decoder with more syndrome bits does better.
-
-    Three arms separate them, all decoded with the same strong decoder:
-
-    | arm | circuit | decoder sees |
-    |---|---|---|
-    | unflagged | no flag qubits | all detectors |
-    | flagged, blind | with flag qubits | flag detector rows **removed** from H |
-    | flagged, sighted | with flag qubits | all detectors |
-
-    Blind ≈ sighted means hardening. Blind ≈ unflagged means information. The
-    syndrome bits are removed from the decoding problem rather than zeroed: zeroing
-    would feed the decoder a syndrome that never occurred.
-    """)
-    return
-
-
-@app.cell
-def _(mo):
-    run_v4 = mo.ui.run_button(label="Run V4 — hardening vs information")
-    run_v5 = mo.ui.run_button(label="Run V5 — flagged fraction vs rounds")
-    mo.hstack([run_v4, run_v5])
-    return run_v4, run_v5
-
-
-@app.cell
-def _(
-    build_memory_circuit,
-    code_from_key,
-    config,
-    core_ready,
-    dem_to_matrices,
-    dz,
-    flag_detector_mask,
-    mo,
-    np,
-    run_v4,
-    wilson,
-):
-    def _arm(H, L, priors, det, obs, workers):
-        names = [("strong", {"kind": "osd", "osd_order": config.osd_order, "max_iter": 20})]
-        res, _ = dz.run_zoo(H, L, priors, det, obs, names, workers=workers,
-                            chunk_size=dz.chunk_for(len(det), workers))
-        k = int(res["strong"]["fail"].sum())
-        return dict(failures=k, ler=wilson(k, len(det)), detectors=H.shape[0], faults=H.shape[1])
-
-    v4_result = None
-    if not core_ready:
-        _out = mo.md("*V4 locked until every test passes.*")
-    elif not run_v4.value:
-        _out = mo.md("*Press **Run V4** (uses the E1 configuration; about twice an E0 run).*")
-    else:
-        _code = code_from_key(config.code)
-        _workers = dz.parallel_workers(config.shots, config.workers)
-        _arms = {}
-        # unflagged circuit
-        _c0 = build_memory_circuit(_code, config.rounds, config.p, use_flags=False)
-        _H0, _L0, _p0 = dem_to_matrices(_c0.detector_error_model(decompose_errors=False))
-        _d0, _o0 = _c0.compile_detector_sampler(seed=config.seed).sample(
-            config.shots, separate_observables=True)
-        _arms["unflagged"] = _arm(_H0, _L0, _p0, _d0, _o0, _workers)
-        # flagged circuit, decoded with and without the flag detectors
-        _c1 = build_memory_circuit(_code, config.rounds, config.p, use_flags=True)
-        _H1, _L1, _p1 = dem_to_matrices(_c1.detector_error_model(decompose_errors=False))
-        _d1, _o1 = _c1.compile_detector_sampler(seed=config.seed).sample(
-            config.shots, separate_observables=True)
-        _mask = flag_detector_mask(_code, config.rounds, True, _c1.num_detectors)
-        _arms["flagged, sighted"] = _arm(_H1, _L1, _p1, _d1, _o1, _workers)
-        _keep = ~_mask
-        _arms["flagged, blind"] = _arm(_H1[_keep], _L1, _p1, _d1[:, _keep], _o1, _workers)
-        v4_result = dict(arms=_arms, shots=config.shots, code=config.code,
-                         rounds=config.rounds, p=config.p)
-        _out = mo.md("V4 finished.")
-    _out
-    return (v4_result,)
-
-
-@app.cell
-def _(RESULTS_DIR, export_bundle, mo, os, plt, v4_loaded, v4_result, write_result_file):
-    v4_data = v4_result if v4_result is not None else v4_loaded
-    mo.stop(v4_data is None, mo.md("*Run V4, or load a saved run above.*"))
-    _order = ["unflagged", "flagged, blind", "flagged, sighted"]
-    _a = v4_data["arms"]
-    _fig, _ax = plt.subplots(figsize=(7.5, 4.2))
-    for _i, _n in enumerate(_order):
-        _m = _a[_n]["ler"]
-        _ax.errorbar([_i], [_m[0] if _m[0] > 0 else _m[2]],
-                     yerr=[[max(_m[0] - _m[1], 0)], [max(_m[2] - _m[0], 0)]],
-                     fmt="o" if _m[0] > 0 else "v", ms=9, capsize=6, color="#1f77b4")
-        _ax.annotate(f"{_a[_n]['failures']} fails", (_i, _m[2]), textcoords="offset points",
-                     xytext=(0, 10), ha="center", fontsize=8)
-    _ax.set_xticks(range(3), _order)
-    _ax.set_yscale("log")
-    _ax.set_xlim(-0.5, 2.5)
-    _ax.set_ylabel("logical error rate (strong decoder)")
-    _ax.set_title(f"V4 — {v4_data['code']}, T={v4_data['rounds']}, "
-                  f"{v4_data['shots']:,} shots per arm")
-    _ax.grid(True, which="both", axis="y", alpha=0.3)
-    _fig.tight_layout()
-
-    # Which explanation do the numbers support? Compare the three intervals.
-    _u, _b, _s = (_a[n]["ler"] for n in _order)
-
-    def _overlap(x, y):
-        return not (x[2] < y[1] or y[2] < x[1])
-
-    def _better(x, y):            # x significantly lower (better) than y
-        return x[2] < y[1]
-
-    if _overlap(_b, _s) and _better(_b, _u):
-        _verdict = ("**Circuit hardening.** Blind decoding of the flagged circuit is as good as "
-                    "sighted and beats the unflagged circuit, so the flag CNOTs themselves reduce "
-                    "the damage; the flag outcomes add little.")
-    elif _overlap(_b, _u) and _better(_s, _b):
-        _verdict = ("**Extra information.** Blind decoding falls back to the unflagged rate, so the "
-                    "gain comes from the decoder reading the flag detectors, not from the circuit.")
-    elif _better(_u, _b) and _better(_s, _u):
-        _verdict = ("**Information, against a noisier circuit.** The flag qubits make the circuit "
-                    "worse — blind decoding is significantly poorer than no flags at all — but the "
-                    "flag outcomes more than pay that back when the decoder can read them. Flags "
-                    "here are decoder input, not circuit hardening.")
-    elif _better(_u, _b) and not _better(_s, _u):
-        _verdict = ("**Flags cost accuracy.** The extra flag circuitry adds more error than its "
-                    "outcomes recover, even with the decoder reading them.")
-    elif _overlap(_b, _u) and _overlap(_s, _u):
-        _verdict = "**Inconclusive** — the three arms overlap. Run more shots."
-    else:
-        _verdict = ("**Mixed.** Ordering: " + ", ".join(
-            f"{n} {_a[n]['ler'][0]:.2e}" for n in sorted(_order, key=lambda n: _a[n]["ler"][0]))
-            + ". Read the intervals in the table below.")
-    _rows = [dict(arm=n, failures=_a[n]["failures"], ler=_a[n]["ler"][0],
-                  ci_low=_a[n]["ler"][1], ci_high=_a[n]["ler"][2],
-                  detectors=_a[n]["detectors"], faults=_a[n]["faults"]) for n in _order]
-    _tag = v4_data["code"].strip("[]").replace(", ", "-")
-    _path = write_result_file(
-        os.path.join(RESULTS_DIR, f"V4_{_tag}_T{v4_data['rounds']}_p{v4_data['p']:g}_"
-                                  f"{v4_data['shots']}shots.json"),
-        {"kind": "validation", "config": {k: v4_data[k] for k in ("code", "rounds", "p", "shots")},
-         "checks": {"v4": {n: _a[n] for n in _order}}})
-    _folder = export_bundle(_path, f"V4 hardening vs information — {v4_data['code']}",
-                            {"v4_arms": _fig}, {"arms": _rows}, notes=_verdict)
-    mo.vstack([mo.md("### V4 — hardening or information?"), mo.md(_verdict),
-               mo.md("| arm | failures | LER | 95% CI | detectors |\n|:--|--:|--:|:--|--:|\n"
-                     + "\n".join(f"| {r['arm']} | {r['failures']} | {r['ler']:.3e} | "
-                                  f"[{r['ci_low']:.3e}, {r['ci_high']:.3e}] | {r['detectors']} |"
-                                  for r in _rows)),
-               mo.md(f"Saved to `{_path}` · exported to `{_folder}`"), _fig])
-    return
-
-
-@app.cell
-def _(
-    build_memory_circuit,
-    code_from_key,
-    config,
-    core_ready,
-    flag_detector_mask,
-    mo,
-    run_v5,
-):
-    v5_run = None
-    if core_ready and run_v5.value:
-        _code = code_from_key(config.code)
-        _rows = []
-        for _T in (3, 6, 12, 18, 24):
-            _circ = build_memory_circuit(_code, _T, config.p, use_flags=True)
-            _det = _circ.compile_detector_sampler(seed=config.seed).sample(2000)
-            _mask = flag_detector_mask(_code, _T, True, _circ.num_detectors)
-            _bits = _det[:, _mask]
-            _rows.append(dict(rounds=_T, flag_detectors=int(_mask.sum()),
-                              fraction_any_flag=float((_bits.sum(1) > 0).mean()),
-                              mean_flags_per_shot=float(_bits.sum(1).mean())))
-        v5_run = dict(code=config.code, p=config.p, shots=2000, rows=_rows)
-    mo.md("*Press **Run V5** — flag statistics only, no decoding, so it takes seconds.*"
-          if v5_run is None else "V5 finished.")
-    return (v5_run,)
-
-
-@app.cell
-def _(RESULTS_DIR, export_bundle, mo, os, plt, v5_loaded, v5_run, write_result_file):
-    v5_data = v5_run if v5_run is not None else v5_loaded
-    mo.stop(v5_data is None, mo.md("*Run V5, or load a saved run above.*"))
-    _rows = v5_data["rows"]
-    _fig, (_a, _b) = plt.subplots(1, 2, figsize=(11, 4))
-    _Ts = [r["rounds"] for r in _rows]
-    _a.plot(_Ts, [r["fraction_any_flag"] for r in _rows], "o-", color="#d62728")
-    _a.axhline(1.0, color="k", lw=0.7, ls=":")
-    _a.set_ylim(0, 1.05)
-    _a.set_xlabel("syndrome rounds T")
-    _a.set_ylabel("fraction of shots with at least one flag")
-    _a.set_title("'Any flag fired' saturates with T")
-    _b.plot(_Ts, [r["mean_flags_per_shot"] for r in _rows], "s-", color="#1f77b4")
-    _b.set_xlabel("syndrome rounds T")
-    _b.set_ylabel("mean flag bits per shot")
-    _b.set_title("Flags fire in proportion to rounds")
-    for _ax in (_a, _b):
-        _ax.grid(True, alpha=0.3)
-    _fig.tight_layout()
-    _tag = v5_data["code"].strip("[]").replace(", ", "-")
-    _path = write_result_file(
-        os.path.join(RESULTS_DIR, f"V5_{_tag}_p{v5_data['p']:g}_flagrate.json"),
-        {"kind": "validation",
-         "config": dict(code=v5_data["code"], p=v5_data["p"], shots=v5_data["shots"]),
-         "checks": {"v5": _rows}})
-    _folder = export_bundle(_path, f"V5 flag rate vs rounds — {v5_data['code']}, p={v5_data['p']}",
-                            {"v5_flag_rate": _fig}, {"flag_rate": _rows},
-                            notes="A trigger that fires on nearly every shot cannot discriminate; "
-                                  "this is the mechanism behind a null result for flag triggering.")
-    mo.vstack([mo.md("### V5 — does the trigger saturate?"),
-               mo.md("| T | flag detectors | shots with any flag | mean flags per shot |\n"
-                     "|--:|--:|--:|--:|\n"
-                     + "\n".join(f"| {r['rounds']} | {r['flag_detectors']} | "
-                                  f"{r['fraction_any_flag']:.1%} | {r['mean_flags_per_shot']:.2f} |"
-                                  for r in _rows)),
-               mo.md(f"Saved to `{_path}` · exported to `{_folder}`"), _fig])
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ## 11b. E3 — Decoder zoo: is flag-triggered switching viable at all?
-
-    E1 tested one decoder pair. A flag trigger might still pay off with a
+    Experiment 4 tested one decoder pair. A flag trigger might still pay off with a
     different weak decoder (one that fails silently, or costs more) or a
-    different strong decoder. E3 tests **every weak × strong pair** in a
+    different strong decoder. Experiment 6 tests **every weak × strong pair** in a
     catalogue, against eight trigger rules, on the same shots.
 
     **Method.** Each shot is decoded *once* by every decoder. Each policy is
@@ -3443,17 +4138,6 @@ def _(mo):
 
 
 @app.cell
-def _(mo):
-    import sys as _sys
-    _here = mo.notebook_dir()
-    _here = str(_here) if _here is not None else "."
-    if _here not in _sys.path:
-        _sys.path.insert(0, _here)
-    import decoder_zoo as dz
-    return (dz,)
-
-
-@app.cell
 def _(
     BB_PRESETS,
     BpOsdDecoder,
@@ -3480,9 +4164,10 @@ def _(
 ):
     _code = bb_from_preset("[[72, 12, 6]]", BB_PRESETS)
     _T = 3
-    _circ = build_memory_circuit(_code, _T, 2e-3, use_flags=True)
+    _XDET = False                       # matches ExperimentConfig.x_detectors
+    _circ = build_memory_circuit(_code, _T, 2e-3, use_flags=True, x_detectors=_XDET)
     _H, _L, _pr = dem_to_matrices(_circ.detector_error_model(decompose_errors=False))
-    _mask = flag_detector_mask(_code, _T, True, _circ.num_detectors)
+    _mask = flag_detector_mask(_code, _T, True, _circ.num_detectors, x_detectors=_XDET)
     _det, _obs = _circ.compile_detector_sampler(seed=17).sample(90, separate_observables=True)
     _det, _obs = _det.astype(np.uint8), _obs.astype(np.uint8)
     _names = ["peel", "BP-ms-10", "OSD-0", "LSD-0"]
@@ -3573,9 +4258,9 @@ def _(
         assert p["verdict_accuracy"] == expected, p["verdict_accuracy"]
 
     def _ablation_matches_switchpolicy():
-        """E1 derives its policies instead of running them; it must agree exactly."""
+        """Experiment 4 derives its policies instead of running them; it must agree exactly."""
         cfg = ExperimentConfig(code="[[72, 12, 6]]", rounds=_T, p=2e-3, shots=90, seed=17,
-                               use_flags=True, osd_order=0, workers=1)
+                               use_flags=True, osd_order=0, workers=1, x_detectors=_XDET)
         got = run_ablation(cfg, keep_samples=False)
         peel, osd = PeelingDecoder(_H, _pr), BpOsdDecoder(_H, _pr, osd_order=cfg.osd_order)
         ref = run_benchmark(_circ, {t: SwitchPolicy(peel, osd, t, _mask)
@@ -3634,7 +4319,7 @@ def _(
 
     def _blind_decoding_removes_flag_rows():
         """
-        V4's 'blind' arm must drop the flag detector rows, not zero them: a zeroed
+        The blind arm (Experiment 2) must drop the flag detector rows, not zero them: a zeroed
         syndrome claims no flag fired, which is a syndrome that never occurred.
         """
         keep = ~_mask
@@ -3648,7 +4333,7 @@ def _(
                 "blind arm must still decode consistently on the reduced matrix"
 
     def _flag_rate_grows_with_rounds():
-        """V5's mechanism: more rounds means more chances for a flag to fire."""
+        """Experiment 3's mechanism: more rounds means more chances for a flag to fire."""
         means = []
         for T in (2, 6):
             circ = build_memory_circuit(_code, T, 2e-3, use_flags=True)
@@ -3675,7 +4360,7 @@ def _(
                     "gains/losses vs primary_fail must be exactly catches/harms"
         assert len(a["pairs"]) == 4 and all("verdict" in p for p in a["pairs"])
 
-    tests_zoo = run_checks([
+    tests_exp6 = run_checks([
         ("compiled peeling reproduces the notebook's PeelingDecoder exactly", _peel_matches_notebook),
         ("zoo decoders: honest convergence, strong ones always valid", _zoo_decoders_valid),
         ("derived policies reproduce SwitchPolicy shot by shot", _derivation_matches_switchpolicy),
@@ -3684,53 +4369,68 @@ def _(
         ("break-even cost ratio formula", _breakeven_formula),
         ("no rule gains more than the headroom; gains = catches", _headroom_bounds_gain),
         ("too few failures gives 'inconclusive', never 'viable'", _inconclusive_when_few_failures),
-        ("all four E3 graphs render", _graphs_render),
-        ("parallel E1 (run_ablation) matches SwitchPolicy exactly", _ablation_matches_switchpolicy),
+        ("all four decoder-zoo graphs render", _graphs_render),
+        ("parallel ablation matches SwitchPolicy exactly", _ablation_matches_switchpolicy),
         ("POSITIVE CONTROL: injected silent failures are detected", _positive_control_is_detected),
         ("zero headroom reports 'impossible', not 'inconclusive'", _zero_headroom_is_impossible_not_inconclusive),
         ("strong-decoder ceiling and flag diagnostics are correct", _ceiling_and_diagnostics),
-        ("V4 blind arm removes flag rows rather than zeroing them", _blind_decoding_removes_flag_rows),
-        ("V5 flag rate grows with the number of rounds", _flag_rate_grows_with_rounds),
+        ("blind arm removes flag rows, not zeroes them", _blind_decoding_removes_flag_rows),
+        ("flag rate grows with the number of rounds", _flag_rate_grows_with_rounds),
     ])
     _backend = _state.get("backend", "not run")
-    mo.vstack([render_checks("decoder zoo", tests_zoo),
+    mo.vstack([render_checks("decoder zoo", tests_exp6),
                mo.md(f"Parallel backend on this machine: **{_backend}** · "
-                     f"compiled peeling (numba): **{'yes' if dz.HAVE_NUMBA else 'no — run `uv add numba`'}**")])
-    return (tests_zoo,)
+                     f"compiled peeling: **{dz.NUMBA_STATUS}**"
+                     + ("" if dz.HAVE_NUMBA else
+                        "  \nWithout numba the peeling decoder runs ~100x slower (17 ms vs "
+                        "0.16 ms per shot), which makes every cost comparison involving `peel` "
+                        "meaningless. Install it with `uv add numba`, then reload this notebook."))])
+    return (tests_exp6,)
 
 
 @app.cell
 def _(BB_PRESETS, GB_PRESETS, dz, mo, os):
     _cores = os.cpu_count() or 1
-    ui_zoo_code = mo.ui.dropdown(list(BB_PRESETS) + list(GB_PRESETS), value="[[72, 12, 6]]", label="Code")
-    ui_zoo_rounds = mo.ui.slider(1, 12, value=6, label="Rounds T")
-    ui_zoo_p = mo.ui.dropdown(["5e-4", "1e-3", "2e-3", "3e-3"], value="1e-3", label="p")
-    ui_zoo_shots = mo.ui.number(start=100, stop=1_000_000, step=100, value=20_000, label="Shots")
-    ui_zoo_seed = mo.ui.number(value=20260922, label="Seed")
-    ui_zoo_workers = mo.ui.slider(1, max(2, _cores), value=max(1, _cores - 1),
-                                  label=f"CPU workers (of {_cores})")
-    ui_zoo_weak = mo.ui.multiselect(list(dz.WEAK) + list(dz.CONTROLS), value=dz.DEFAULT_WEAK,
+    ui_exp6_code = mo.ui.dropdown(list(BB_PRESETS) + list(GB_PRESETS), value="[[72, 12, 6]]", label="Code")
+    ui_exp6_rounds = mo.ui.slider(1, 24, value=6, step=1, label="Rounds T")
+    ui_exp6_p = mo.ui.dropdown(["5e-4", "1e-3", "2e-3", "3e-3"], value="1e-3", label="p")
+    ui_exp6_shots = mo.ui.number(start=100, stop=1_000_000, step=100, value=20_000,
+                                 label="Shots (20k+ to rank the rules)")
+    ui_exp6_seed = mo.ui.number(value=20260922, label="Seed")
+    # Each worker holds its own decoders, so peak memory scales with the worker
+    # count times the number of decoders. 15 workers x 8 decoders exhausted 
+    # memory on a 16-thread machine, so the default here is deliberately modest.
+    ui_exp6_workers = mo.ui.slider(1, max(2, _cores), value=min(8, max(1, _cores - 4)),
+                                   label=f"CPU workers (of {_cores}; lower this if you run out of memory)")
+    ui_exp6_weak = mo.ui.multiselect(list(dz.WEAK) + list(dz.CONTROLS), value=dz.DEFAULT_WEAK,
                                     label="Weak decoders")
-    ui_zoo_strong = mo.ui.multiselect(list(dz.STRONG), value=dz.DEFAULT_STRONG, label="Strong decoders")
-    mo.vstack([mo.md("### E3 configuration (flags always on)"),
-               mo.hstack([ui_zoo_code, ui_zoo_p, ui_zoo_rounds]),
-               mo.hstack([ui_zoo_shots, ui_zoo_seed, ui_zoo_workers]),
-               ui_zoo_weak, ui_zoo_strong,
+    ui_exp6_strong = mo.ui.multiselect(list(dz.STRONG), value=dz.DEFAULT_STRONG, label="Strong decoders")
+    ui_exp6_xdet = mo.ui.switch(value=False, label="X-check detectors")
+    mo.vstack([mo.md("### Experiment 6 — configuration (flags always on)"),
+               mo.hstack([ui_exp6_code, ui_exp6_p, ui_exp6_rounds]),
+               mo.hstack([ui_exp6_shots, ui_exp6_seed, ui_exp6_workers]),
+               ui_exp6_xdet,
+               ui_exp6_weak, ui_exp6_strong,
                mo.md("*OSD-CS orders cost roughly 15× OSD-0 per shot; LSD-CS is far cheaper. "
                      "Use the estimate button before a long run.*"),
+               mo.md("*Memory, not cores, is usually the limit here: every worker builds its "
+                     "own copy of each decoder. If a run reports a process-pool failure it "
+                     "halves the workers and retries automatically, but starting lower is "
+                     "faster. Fewer decoders per run also helps.*"),
                mo.md("*`control-*` weak decoders are **positive controls**: they are wrong "
                      "on a fraction of flagged shots by construction. Run one to show this "
                      "analysis detects silent failures when they exist — the check that makes "
                      "a negative result believable.*")])
     return (
-        ui_zoo_code,
-        ui_zoo_p,
-        ui_zoo_rounds,
-        ui_zoo_seed,
-        ui_zoo_shots,
-        ui_zoo_strong,
-        ui_zoo_weak,
-        ui_zoo_workers,
+        ui_exp6_code,
+        ui_exp6_p,
+        ui_exp6_rounds,
+        ui_exp6_seed,
+        ui_exp6_shots,
+        ui_exp6_strong,
+        ui_exp6_weak,
+        ui_exp6_workers,
+        ui_exp6_xdet,
     )
 
 
@@ -3740,65 +4440,71 @@ def _(
     code_from_key,
     dem_to_matrices,
     flag_detector_mask,
-    ui_zoo_code,
-    ui_zoo_p,
-    ui_zoo_rounds,
-    ui_zoo_seed,
-    ui_zoo_shots,
-    ui_zoo_strong,
-    ui_zoo_weak,
-    ui_zoo_workers,
+    ui_exp6_code,
+    ui_exp6_p,
+    ui_exp6_rounds,
+    ui_exp6_seed,
+    ui_exp6_shots,
+    ui_exp6_strong,
+    ui_exp6_weak,
+    ui_exp6_workers,
+    ui_exp6_xdet,
 ):
-    zoo_setup = dict(code=ui_zoo_code.value, rounds=int(ui_zoo_rounds.value),
-                     p=float(ui_zoo_p.value), shots=int(ui_zoo_shots.value),
-                     seed=int(ui_zoo_seed.value), workers=int(ui_zoo_workers.value),
-                     weak=list(ui_zoo_weak.value), strong=list(ui_zoo_strong.value))
+    exp6_setup = dict(code=ui_exp6_code.value, rounds=int(ui_exp6_rounds.value),
+                     p=float(ui_exp6_p.value), shots=int(ui_exp6_shots.value),
+                     seed=int(ui_exp6_seed.value), workers=int(ui_exp6_workers.value),
+                     weak=list(ui_exp6_weak.value), strong=list(ui_exp6_strong.value),
+                     x_detectors=bool(ui_exp6_xdet.value))
 
-    def build_zoo_problem(setup):
-        """Circuit, DEM matrices and flag mask for an E3 configuration."""
+    def build_exp6_problem(setup):
+        """Circuit, DEM matrices and flag mask for an Experiment 6 configuration."""
         code = code_from_key(setup["code"])
-        circ = build_memory_circuit(code, setup["rounds"], setup["p"], use_flags=True)
+        xdet = bool(setup.get("x_detectors", False))
+        circ = build_memory_circuit(code, setup["rounds"], setup["p"], use_flags=True,
+                                    x_detectors=xdet)
         H, L, pr = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
-        mask = flag_detector_mask(code, setup["rounds"], True, circ.num_detectors)
+        mask = flag_detector_mask(code, setup["rounds"], True, circ.num_detectors,
+                                  x_detectors=xdet)
         return code, circ, H, L, pr, mask
 
-    return build_zoo_problem, zoo_setup
+    return build_exp6_problem, exp6_setup
 
 
 @app.cell
-def _(RESULTS_DIR, dz, glob, mo, os, zoo_setup):
+def _(RESULTS_DIR, dz, glob, mo, os, exp6_setup):
     import hashlib as _hashlib
-    _tag = zoo_setup["code"].strip("[]").replace(", ", "-")
-    _stem = (f"E3_{_tag}_T{zoo_setup['rounds']}_p{zoo_setup['p']:g}_"
-             f"{zoo_setup['shots']}shots_seed{zoo_setup['seed']}")
-    _key = _hashlib.sha1(",".join(zoo_setup["weak"] + zoo_setup["strong"]).encode()).hexdigest()[:8]
-    zoo_checkpoint = dict(data_path=os.path.join(RESULTS_DIR, _stem + ".npz"),
+    _tag = exp6_setup["code"].strip("[]").replace(", ", "-")
+    _stem = (f"EXP6_{_tag}_T{exp6_setup['rounds']}_p{exp6_setup['p']:g}_"
+             f"{exp6_setup['shots']}shots_seed{exp6_setup['seed']}"
+             f"{'_xdet' if exp6_setup.get('x_detectors') else ''}")
+    _key = _hashlib.sha1(",".join(exp6_setup["weak"] + exp6_setup["strong"]).encode()).hexdigest()[:8]
+    exp6_checkpoint = dict(data_path=os.path.join(RESULTS_DIR, _stem + ".npz"),
                           dir=os.path.join(RESULTS_DIR, "checkpoints", f"{_stem}_{_key}"))
-    _done = len(glob.glob(os.path.join(zoo_checkpoint["dir"], "chunk_*.npz")))
-    _total = -(-zoo_setup["shots"] // dz.CHUNK_SIZE)
+    _done = len(glob.glob(os.path.join(exp6_checkpoint["dir"], "chunk_*.npz")))
+    _total = -(-exp6_setup["shots"] // dz.CHUNK_SIZE)
     (mo.md(f"🔁 **A partial run of this configuration exists: {_done}/{_total} chunks done.** "
-           "Pressing Run E3 resumes it instead of starting over.")
+           "Pressing Run Experiment 6 resumes it instead of starting over.")
      if _done else mo.md(""))
-    return (zoo_checkpoint,)
+    return (exp6_checkpoint,)
 
 
 @app.cell
 def _(mo):
-    run_zoo_estimate = mo.ui.run_button(label="Estimate run time (~30 s pilot)")
-    run_zoo = mo.ui.run_button(label="Run E3 — decoder zoo")
-    mo.hstack([run_zoo_estimate, run_zoo])
-    return run_zoo, run_zoo_estimate
+    estimate_exp6 = mo.ui.run_button(label="Estimate run time (~30 s pilot)")
+    run_exp6 = mo.ui.run_button(label="Run Experiment 6 — decoder zoo")
+    mo.hstack([estimate_exp6, run_exp6])
+    return run_exp6, estimate_exp6
 
 
 @app.cell
-def _(build_zoo_problem, core_ready, dz, mo, np, run_zoo_estimate, tests_zoo, time, zoo_setup):
-    mo.stop(not (core_ready and all(r["status"] == "PASS" for r in tests_zoo)),
-            mo.md("*E3 locked until every test, including the decoder-zoo tests, passes.*"))
-    mo.stop(not run_zoo_estimate.value)
-    _code, _circ, _H, _L, _pr, _ = build_zoo_problem(zoo_setup)
+def _(build_exp6_problem, core_ready, dz, mo, np, estimate_exp6, tests_exp6, time, exp6_setup):
+    mo.stop(not (core_ready and all(r["status"] == "PASS" for r in tests_exp6)),
+            mo.md("*Experiment 6 locked until every test, including the decoder-zoo tests, passes.*"))
+    mo.stop(not estimate_exp6.value)
+    _code, _circ, _H, _L, _pr, _ = build_exp6_problem(exp6_setup)
     _det = _circ.compile_detector_sampler(seed=1).sample(25).astype(np.uint8)
     _rows, _total = [], 0.0
-    for _name in zoo_setup["weak"] + zoo_setup["strong"]:
+    for _name in exp6_setup["weak"] + exp6_setup["strong"]:
         _dec = dz.make_decoder(_name, _H, _pr)
         _dec.decode(_det[0])                              # compile / warm up
         _t0 = time.perf_counter()
@@ -3807,114 +4513,114 @@ def _(build_zoo_problem, core_ready, dz, mo, np, run_zoo_estimate, tests_zoo, ti
         _ms = 1e3 * (time.perf_counter() - _t0) / len(_det)
         _total += _ms
         _rows.append(f"| {_name} | {_ms:.2f} ms |")
-    _eta = zoo_setup["shots"] * _total / 1e3 / max(1, zoo_setup["workers"])
+    _eta = exp6_setup["shots"] * _total / 1e3 / max(1, exp6_setup["workers"])
     mo.md("| decoder | time per shot |\n|:--|--:|\n" + "\n".join(_rows)
-          + f"\n\n**Estimated run time: {_eta / 60:.0f} min** for {zoo_setup['shots']:,} shots "
-            f"on {zoo_setup['workers']} workers (parallel speed-up is usually a little below the "
+          + f"\n\n**Estimated run time: {_eta / 60:.0f} min** for {exp6_setup['shots']:,} shots "
+            f"on {exp6_setup['workers']} workers (parallel speed-up is usually a little below the "
             "worker count).")
     return
 
 
 @app.cell
 def _(
-    build_zoo_problem,
+    build_exp6_problem,
     core_ready,
     datetime,
     dz,
     glob,
     mo,
     os,
-    run_zoo,
-    tests_zoo,
-    zoo_checkpoint,
-    zoo_setup,
+    run_exp6,
+    tests_exp6,
+    exp6_checkpoint,
+    exp6_setup,
 ):
     def _run_e3():
         """Sample the shots, decode them with every decoder, save, and summarise."""
-        _code, _circ, _H, _L, _pr, _mask = build_zoo_problem(zoo_setup)
-        _det, _obs = _circ.compile_detector_sampler(seed=zoo_setup["seed"]).sample(
-            zoo_setup["shots"], separate_observables=True)
-        _n_flags, _rounds = dz.flag_features(_det, _mask, _code.hx.shape[0], zoo_setup["rounds"])
+        _code, _circ, _H, _L, _pr, _mask = build_exp6_problem(exp6_setup)
+        _det, _obs = _circ.compile_detector_sampler(seed=exp6_setup["seed"]).sample(
+            exp6_setup["shots"], separate_observables=True)
+        _n_flags, _rounds = dz.flag_features(_det, _mask, _code.hx.shape[0], exp6_setup["rounds"])
         _names = []
         _vector = None
-        for _n in zoo_setup["weak"] + zoo_setup["strong"]:
+        for _n in exp6_setup["weak"] + exp6_setup["strong"]:
             _spec = dict(dz.CATALOGUE[_n])
             if _spec.get("kind") == "control":
                 if _vector is None:
                     _vector = dz.logical_null_vector(_H, _L)   # H v = 0 but L v = 1
                 _spec.update(vector=_vector, flag_mask=_mask)
             _names.append((_n, _spec))
-        _n_chunks = -(-zoo_setup["shots"] // dz.CHUNK_SIZE)
-        with mo.status.progress_bar(total=_n_chunks, title="E3: decoding", show_eta=True,
+        _n_chunks = -(-exp6_setup["shots"] // dz.CHUNK_SIZE)
+        with mo.status.progress_bar(total=_n_chunks, title="Experiment 6: decoding", show_eta=True,
                                     show_rate=True) as _bar:
-            # every finished chunk is written to zoo_checkpoint["dir"] at once, so an
-            # interrupted run resumes when Run E3 is pressed again with the same settings
+            # every finished chunk is written to exp6_checkpoint["dir"] at once, so an
+            # interrupted run resumes when Run Experiment 6 is pressed again with the same settings
             _res, _backend = dz.run_zoo(_H, _L, _pr, _det, _obs, _names,
-                                        workers=zoo_setup["workers"], on_chunk=_bar.update,
-                                        checkpoint_dir=zoo_checkpoint["dir"])
-        _path = zoo_checkpoint["data_path"]
-        _meta = dict(zoo_setup, backend=_backend, numba=dz.HAVE_NUMBA,
+                                        workers=exp6_setup["workers"], on_chunk=_bar.update,
+                                        checkpoint_dir=exp6_checkpoint["dir"])
+        _path = exp6_checkpoint["data_path"]
+        _meta = dict(exp6_setup, backend=_backend, numba=dz.HAVE_NUMBA,
                      created=datetime.datetime.now().isoformat(timespec="seconds"))
         dz.save_zoo(_path, _res, _n_flags, _rounds, _meta)
-        for _f in glob.glob(os.path.join(zoo_checkpoint["dir"], "chunk_*.npz")):
+        for _f in glob.glob(os.path.join(exp6_checkpoint["dir"], "chunk_*.npz")):
             os.remove(_f)                     # the full result is saved: drop the checkpoints
-        if os.path.isdir(zoo_checkpoint["dir"]) and not os.listdir(zoo_checkpoint["dir"]):
-            os.rmdir(zoo_checkpoint["dir"])
+        if os.path.isdir(exp6_checkpoint["dir"]) and not os.listdir(exp6_checkpoint["dir"]):
+            os.rmdir(exp6_checkpoint["dir"])
         _data = dict(results=_res, n_flags=_n_flags, flag_rounds=_rounds, meta=_meta, path=_path)
-        return _data, mo.md(f"Decoded {zoo_setup['shots']:,} shots × {len(_names)} decoders "
+        return _data, mo.md(f"Decoded {exp6_setup['shots']:,} shots × {len(_names)} decoders "
                             f"({_backend}). Saved to `{_path}`.")
 
-    # Always define e3_run (None when not run): marimo does not run cells that
+    # Always define exp6_run (None when not run): marimo does not run cells that
     # depend on a variable that a stopped cell never defined.
-    e3_run = None
-    if not (core_ready and all(r["status"] == "PASS" for r in tests_zoo)):
-        _out = mo.md("*E3 locked until every test passes.*")
-    elif not run_zoo.value:
-        _out = mo.md("*Press **Run E3** to start, or load a previous run below.*")
+    exp6_run = None
+    if not (core_ready and all(r["status"] == "PASS" for r in tests_exp6)):
+        _out = mo.md("*Experiment 6 locked until every test passes.*")
+    elif not run_exp6.value:
+        _out = mo.md("*Press **Run Experiment 6** to start, or load a previous run below.*")
     else:
-        e3_run, _out = _run_e3()
+        exp6_run, _out = _run_e3()
     _out
-    return (e3_run,)
+    return (exp6_run,)
 
 
 @app.cell
-def _(RESULTS_DIR, e3_run, glob, mo, os):
-    _ = e3_run                            # re-list saved runs after each new run
-    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "E3_*.npz")))
-    ui_zoo_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+def _(RESULTS_DIR, exp6_run, glob, mo, os):
+    _ = exp6_run                            # re-list saved runs after each new run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "EXP6_*.npz")))
+    ui_exp6_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
                                  value=os.path.basename(_files[-1]) if _files else None,
-                                 label="Previous E3 run")
-    load_zoo_btn = mo.ui.run_button(label="Load")
-    mo.hstack([ui_zoo_file, load_zoo_btn]) if _files else mo.md("*No saved E3 runs yet.*")
-    return load_zoo_btn, ui_zoo_file
+                                 label="Saved Experiment 6 run")
+    load_exp6_btn = mo.ui.run_button(label="Load")
+    mo.hstack([ui_exp6_file, load_exp6_btn]) if _files else mo.md("*No saved Experiment 6 runs yet.*")
+    return load_exp6_btn, ui_exp6_file
 
 
 @app.cell
-def _(dz, load_zoo_btn, ui_zoo_file):
-    e3_loaded = None                      # always defined, see the run cell
-    if load_zoo_btn.value and ui_zoo_file.value:
-        _res, _nf, _fr, _meta = dz.load_zoo(ui_zoo_file.value)
-        e3_loaded = dict(results=_res, n_flags=_nf, flag_rounds=_fr, meta=_meta,
-                         path=ui_zoo_file.value)
-    return (e3_loaded,)
+def _(dz, load_exp6_btn, ui_exp6_file):
+    exp6_loaded = None                      # always defined, see the run cell
+    if load_exp6_btn.value and ui_exp6_file.value:
+        _res, _nf, _fr, _meta = dz.load_zoo(ui_exp6_file.value)
+        exp6_loaded = dict(results=_res, n_flags=_nf, flag_rounds=_fr, meta=_meta,
+                         path=ui_exp6_file.value)
+    return (exp6_loaded,)
 
 
 @app.cell
-def _(dz, e3_loaded, e3_run, mo):
-    e3_data = e3_run if e3_run is not None else e3_loaded
-    mo.stop(e3_data is None, mo.md("*Run E3 or load a previous run to see the analysis.*"))
-    _names = list(e3_data["results"])
-    e3_weak = [n for n in _names if n in dz.WEAK or n in dz.CONTROLS]
-    e3_strong = [n for n in _names if n in dz.STRONG]
-    e3_analysis = dz.analyse(e3_data["results"], e3_weak, e3_strong,
-                             e3_data["n_flags"], e3_data["flag_rounds"])
+def _(dz, exp6_loaded, exp6_run, mo):
+    exp6_data = exp6_run if exp6_run is not None else exp6_loaded
+    mo.stop(exp6_data is None, mo.md("*Run Experiment 6 or load a previous run to see the analysis.*"))
+    _names = list(exp6_data["results"])
+    exp6_weak = [n for n in _names if n in dz.WEAK or n in dz.CONTROLS]
+    exp6_strong = [n for n in _names if n in dz.STRONG]
+    exp6_analysis = dz.analyse(exp6_data["results"], exp6_weak, exp6_strong,
+                             exp6_data["n_flags"], exp6_data["flag_rounds"])
 
-    _pairs = e3_analysis["pairs"]
+    _pairs = exp6_analysis["pairs"]
     _viable = [p for p in _pairs if p["verdict"].startswith("viable")]
     _inconclusive = [p for p in _pairs if p["verdict"] == "inconclusive"]
     _head = sum(p["headroom"] for p in _pairs)
-    _lines = [f"### E3 verdict — {e3_analysis['shots']:,} shots, "
-              f"{len(e3_weak)} weak × {len(e3_strong)} strong decoders, `{e3_data['path']}`", ""]
+    _lines = [f"### Experiment 6 — verdict — {exp6_analysis['shots']:,} shots, "
+              f"{len(exp6_weak)} weak × {len(exp6_strong)} strong decoders, `{exp6_data['path']}`", ""]
     if _viable:
         _lines.append(f"**Flag-triggered switching is viable for {len(_viable)} of {len(_pairs)} pairs:** "
                       + ", ".join(f"{p['weak']} → {p['strong']} ({p['verdict'].split(': ')[1]}, "
@@ -3948,28 +4654,28 @@ def _(dz, e3_loaded, e3_run, mo):
                "Near zero means the trigger carries almost no usable signal.", "",
                "| decoder | error rate, flagged | unflagged | risk ratio | MI (bits) | "
                "share of failures on flagged shots |", "|:--|--:|--:|--:|--:|--:|"]
-    for f in e3_analysis["flag_diagnostics"]:
+    for f in exp6_analysis["flag_diagnostics"]:
         _lines.append(f"| {f['decoder']} | {f['error_rate_flagged']:.2e} | "
                       f"{f['error_rate_unflagged']:.2e} | {f['risk_ratio']:.1f}× | "
                       f"{f['mutual_information_bits']:.4f} | "
                       f"{f['share_of_failures_on_flagged']:.1%} |")
-    if e3_analysis["strong_ceiling"]:
+    if exp6_analysis["strong_ceiling"]:
         _lines += ["", "#### Is there headroom left in the strong decoder?", "",
                    "Shots one strong decoder gets wrong that another gets right. If almost none "
                    "are fixed, those failures are near-uncorrectable at this noise level and "
                    "reweighting priors — flag-informed or otherwise — cannot help either.", "",
                    "| decoder | failures | fixed by | fixed | broken |",
                    "|:--|--:|:--|--:|--:|"]
-        for c in e3_analysis["strong_ceiling"]:
+        for c in exp6_analysis["strong_ceiling"]:
             _lines.append(f"| {c['decoder']} | {c['failures']} | {c['compared_with']} | "
                           f"{c['fixed_by_other']} | {c['broken_by_other']} |")
     _lines += ["", "| weak decoder | converged | silent failures | silent rate (95% upper) | "
                "on flagged shots | median time |", "|:--|--:|--:|--:|--:|--:|"]
-    for w, v in e3_analysis["weak"].items():
+    for w, v in exp6_analysis["weak"].items():
         _lines.append(f"| {w} | {v['converged']:,} | {v['silent']} | {v['silent_rate'][2]:.2e} | "
                       f"{v['silent_flagged']} | {v['time_us'] / 1e3:.2f} ms |")
     mo.md("\n".join(_lines))
-    return e3_analysis, e3_data, e3_strong, e3_weak
+    return exp6_analysis, exp6_data, exp6_strong, exp6_weak
 
 
 @app.cell
@@ -4027,7 +4733,8 @@ def _(np, plt):
         _lo, _hi = ax.get_ylim()
         ax.set_ylim(_lo / 3, _hi * 3)
         ax.set_xticks(range(len(names)), names)
-        ax.set_ylabel("silent failures / converged shots")
+        ax.set_xlabel("weak decoder")
+        ax.set_ylabel("silent failures per converged shot")
         ax.set_title("How often is each weak decoder confidently wrong?\n(▽ = none seen: 95% upper bound)")
         ax.grid(True, which="both", axis="y", alpha=0.3)
         fig.tight_layout()
@@ -4090,14 +4797,17 @@ def _(np, plt):
                             color="#2ca02c" if pf else ("#d62728" if r["rule"] == "flag-only" else "#9467bd"),
                             ms=11 if pf else 5)
                 ax.set_title(f"{w} → {s}", fontsize=8)
+                ax.set_yscale("symlog", linthresh=1)   # flag-only is huge; keep the rest readable
                 ax.tick_params(labelsize=7)
                 ax.grid(True, alpha=0.3)
                 if i == len(W) - 1:
-                    ax.set_xlabel("escalated", fontsize=8)
+                    ax.set_xlabel("fraction of shots escalated", fontsize=8)
                 if j == 0:
-                    ax.set_ylabel("failures", fontsize=8)
+                    ax.set_ylabel("logical failures", fontsize=8)
         fig.suptitle("Every rule for every pair (★ primary_fail, ● flag rules, red = flag-only). "
-                     "A viable rule sits below ★.", fontsize=9)
+                     "A viable rule sits below or left of ★. Log-ish (symlog) y-axis: "
+                     "flag-only fails on most shots and would otherwise flatten the rest.",
+                     fontsize=9)
         fig.tight_layout()
         return fig
 
@@ -4112,8 +4822,8 @@ def _(np, plt):
 
 @app.cell
 def _(
-    e3_analysis,
-    e3_data,
+    exp6_analysis,
+    exp6_data,
     export_bundle,
     mo,
     plot_zoo_breakeven,
@@ -4121,22 +4831,22 @@ def _(
     plot_zoo_tradeoffs,
     plot_zoo_verdicts,
 ):
-    _figs = {"verdicts": plot_zoo_verdicts(e3_analysis), "silent_failures": plot_zoo_silent(e3_analysis),
-             "breakeven": plot_zoo_breakeven(e3_analysis), "tradeoffs": plot_zoo_tradeoffs(e3_analysis)}
+    _figs = {"verdicts": plot_zoo_verdicts(exp6_analysis), "silent_failures": plot_zoo_silent(exp6_analysis),
+             "breakeven": plot_zoo_breakeven(exp6_analysis), "tradeoffs": plot_zoo_tradeoffs(exp6_analysis)}
     _weak = [dict(weak=w, converged=v["converged"], silent=v["silent"],
                   silent_rate=v["silent_rate"][0], silent_rate_upper=v["silent_rate"][2],
                   silent_on_flagged=v["silent_flagged"], median_time_us=v["time_us"])
-             for w, v in e3_analysis["weak"].items()]
+             for w, v in exp6_analysis["weak"].items()]
     _rows = [{k: (v[0] if k == "ler" else v) for k, v in r.items()} | dict(
-                 ler_low=r["ler"][1], ler_high=r["ler"][2]) for r in e3_analysis["rows"]]
+                 ler_low=r["ler"][1], ler_high=r["ler"][2]) for r in exp6_analysis["rows"]]
     _counts = {}
-    for _p in e3_analysis["pairs"]:
+    for _p in exp6_analysis["pairs"]:
         _counts[_p["verdict"]] = _counts.get(_p["verdict"], 0) + 1
     _folder = export_bundle(
-        e3_data["path"], f"E3 decoder zoo — {e3_analysis['shots']:,} shots",
-        dict(_figs), {"verdicts": e3_analysis["pairs"], "weak_decoders": _weak, "all_rules": _rows,
-                      "flag_diagnostics": e3_analysis["flag_diagnostics"],
-                      "strong_ceiling": e3_analysis["strong_ceiling"]},
+        exp6_data["path"], f"Experiment 6 decoder zoo — {exp6_analysis['shots']:,} shots",
+        dict(_figs), {"verdicts": exp6_analysis["pairs"], "weak_decoders": _weak, "all_rules": _rows,
+                      "flag_diagnostics": exp6_analysis["flag_diagnostics"],
+                      "strong_ceiling": exp6_analysis["strong_ceiling"]},
         notes="Verdict counts: " + ", ".join(f"{k}: {v}" for k, v in sorted(_counts.items())))
     mo.vstack([mo.md(f"**Exported** figures (PNG + PDF), CSV tables and report to `{_folder}`"),
                *[_f for _f in _figs.values()]])
@@ -4148,8 +4858,35 @@ def _(mo):
     mo.md(r"""
     ## 12. Results
 
-    **TODO:** state each finding in one sentence, pointing at the figure/table
-    that supports it. Include the numbers and their confidence intervals.
+    Measured on [[72, 12, 6]] and [[144, 12, 12]] at p = 1e-3 under the
+    circuit-level model of §4. Intervals are 95% Wilson.
+
+    **R1 — a flag trigger cannot improve accuracy.** *Headroom* (silent failures of
+    the weak decoder that the strong decoder repairs) was **0** on [[72,12,6]] at
+    T = 6 and T = 12, and on [[144,12,12]] across all 16 weak x strong pairs of
+    Experiment 6. Headroom bounds what any trigger can gain, so this is a
+    structural result, not a question of statistics. Underlying it: the weak
+    decoder was never confidently wrong — 0 silent failures in ~15,000 converged
+    shots, a rate below 2.5e-4.
+
+    **R2 — the trigger saturates (Experiment 3).** Shots with at least one flag:
+    43% at T = 3, 70% at T = 6, 91% at T = 12, 97% at T = 18, **99%** at T = 24,
+    while the mean number of flag bits grows linearly. Mutual information between
+    "a flag fired" and "the decoder was wrong" is 0.0023 bits. In Experiment 4 the
+    flag rules escalated 76% of shots against 40% for `primary_fail`, at the same
+    logical error rate.
+
+    **R3 — flags help as decoder input (Experiment 2).** With the flag outcomes
+    hidden, the flagged circuit is *worse* than no flags (ratio ~1.45, independent
+    of T). With them read by the decoder it is *better* (ratio ~0.77). Both ratios
+    are flat across T = 6-24, so no crossover appears in that range. The hardware
+    costs +25% qubits, +17% two-qubit gates and +24% expected faults per shot.
+
+    **R4 — switching itself works, and can beat always-accurate.** In the
+    25,000-shot ablation, `primary_fail` had 176 failures against 190 for `always`,
+    escalating only 40% of shots. On 14 shots the weak decoder was right where
+    BP+OSD-0 was wrong, and never the reverse (paired exact test, p ~ 1e-4): its
+    corrections were lighter and more likely.
     """)
     return
 
@@ -4159,13 +4896,37 @@ def _(mo):
     mo.md(r"""
     ## Discussion and limitations
 
-    **TODO.** Prompts:
+    **Why the trigger fails.** A useful trigger needs three things, and this
+    setting supplies none: the fast decoder must fail silently (measured below
+    2.5e-4); the trigger must be selective (flags fire on 70-99% of shots, and
+    worsen with T); and the fast decoder must be expensive enough to be worth
+    skipping (compiled peeling costs 0.16 ms against 38 ms for BP+OSD). The flag
+    outcomes are informative — 432 detectors' worth — but "did any flag fire?"
+    compresses them into one nearly-constant bit.
 
-    - Did the flag trigger beat `primary_fail`? By how much, and is it significant?
-    - At what $p$ does escalation approach 100% and the latency argument fail?
-    - Cost of flags: extra qubits, extra CNOTs, extra noise.
-    - Schedule used vs. Bravyi et al.'s depth-8 schedule.
-    - Python timings vs. real decoder hardware.
+    **Why flags still pay.** Read as detectors, the same outcomes let the decoder
+    explain faults it would otherwise have to guess at. That this survives the
+    circuit's own extra noise is the point of Experiment 2's blind arm, and it
+    qualifies the common argument that flags are not worth their depth and qubits
+    for qLDPC codes: that argument prices the circuit without giving the decoder
+    the flag data.
+
+    **Limitations.**
+
+    1. Our fault model is ~10.8x denser than the reference formula n(wT + T/2 + 1),
+       so absolute rates are not comparable with published figures; every claim
+       here is a relative comparison inside one fixed model. A denser model makes
+       R1 *harder* to obtain, not easier.
+    2. Experiment 2's arms use different circuits, so that comparison is unpaired
+       (blind and sighted are paired with each other).
+    3. Most results come from [[72, 12, 6]]; [[144, 12, 12]] contributes R1 only,
+       and the GB codes are implemented but untested.
+    4. Timings are Python-level. Peeling is compiled, ldpc is C++; cost claims rest
+       on escalation rates and `work`, not on absolute microseconds.
+    5. Flags are placed on X-checks only, which is what a Z-basis memory needs.
+    6. Conclusions apply to superconducting bicycle-type architectures: degree-6
+       connectivity with long-range couplers, p near 1e-3, and syndrome cycles
+       short enough for decoder latency to matter.
     """)
     return
 
@@ -4175,7 +4936,25 @@ def _(mo):
     mo.md(r"""
     ## Conclusion and future work
 
-    **TODO.**
+    Flag information is valuable to a decoder and worthless as a routing signal.
+    Fed to the decoder as detectors it lowers the logical error rate by roughly a
+    quarter, even though the flag circuitry alone raises it by roughly a half. Used
+    as a pre-decode trigger it cannot help: the fast decoder is never confidently
+    wrong, so there is nothing to catch, and the flags fire on nearly every shot,
+    so there is nothing to discriminate. Both statements are measured rather than
+    argued, with a positive control showing the analysis detects the effect when it
+    is present.
+
+    **Future work.**
+
+    - Graded flag signals (flag count, clustering within a round) or the BP
+      soft-information gap, rather than one binary bit.
+    - Repeat Experiment 2 on [[144, 12, 12]] and on a GB code, and push T past 24
+      to look for the crossover the flat ratios do not yet show.
+    - Reconcile the noise model with the reference formula so absolute rates become
+      directly comparable.
+    - Compare against the other hook-error mitigations at equal p: biased-noise
+      ancillas and CNOT-schedule optimisation.
     """)
     return
 
@@ -4196,11 +4975,20 @@ def _(mo):
        finite length performance," *Quantum* **5**, 585 (2021).
     6. R. Chao and B. Reichardt, "Quantum error correction with only two extra
        qubits," *Phys. Rev. Lett.* **121**, 050502 (2018).
-    7. Pakhunov (2026), "Analytical Theory of Greedy Peeling for Bivariate Bicycle
-       Codes and Two-Shot Streaming Decoding." **TODO:** complete citation.
-    8. Sahay et al. (2026), "A matching decoder for bivariate bicycle codes."
-       **TODO:** complete citation.
-    9. **TODO:** the decoder-switching reference your proposal builds on.
+    7. A. Pakhunov, "Analytical theory of greedy peeling for bivariate bicycle
+       codes and two-shot streaming decoding," arXiv:2604.11352 (2026).
+    8. A. Sahay, D. J. Williamson and B. J. Brown, "A matching decoder for bivariate
+       bicycle codes," arXiv:2602.22770 (2026).
+    9. R. Toshio, K. Kishi, J. Fujisaki, H. Oshima, S. Sato and K. Fujii, "Decoder
+       switching: breaking the speed-accuracy tradeoff in real-time quantum error
+       correction," arXiv:2510.25222 (2025).
+    10. T. Hillmann et al., "Localized statistics decoding: a parallel decoding
+       algorithm for quantum LDPC codes," Nat. Commun. 16, 8214 (2025).
+    11. T. Chen, T. J. Yoder et al., "Calibrated decoders for experimental quantum
+       error correction," arXiv:2110.04285 (2021) — flag outcomes used as decoder
+       input on heavy-hex codes.
+    12. A. Vittal et al., "Flag proxy networks," arXiv:2409.14283 (MICRO 2024) —
+       flag-aware decoding for hyperbolic surface and colour codes.
     """)
     return
 

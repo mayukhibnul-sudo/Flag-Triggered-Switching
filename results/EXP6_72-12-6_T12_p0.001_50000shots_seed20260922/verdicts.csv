@@ -1,0 +1,71 @@
+weak,strong,verdict,verdict_accuracy,verdict_cost,headroom,min_detectable_discordant,pf_failures,pf_escalation,pf_cost_us,always_failures,best_accuracy_rule,best_cost_rule,best_saving,cost_ratio
+peel,OSD-0,not viable,impossible: no headroom,not viable,0,6,284,0.44532,3391.5076518579626,294,,,0.0,0.005389370024204254
+peel,OSD-CS4,not viable,impossible: no headroom,not viable,0,6,65,0.44532,59277.914668427795,67,,,0.0,0.005030336324125528
+peel,LSD-0,not viable,impossible: no headroom,not viable,0,6,283,0.44532,3091.708004285941,293,,,0.0,0.005363885313272476
+peel,LSD-CS4,not viable,impossible: no headroom,not viable,0,6,225,0.44532,3194.5636371216347,233,,,0.0,0.005396832711994648
+peel,OSD-CS2,not viable,impossible: no headroom,not viable,0,6,65,0.44532,58774.81458333868,67,,,0.0,0.0050690313801169395
+peel,OSD-CS7,not viable,impossible: no headroom,not viable,0,6,63,0.44532,59026.91251620978,65,,,0.0,0.005030058789998293
+peel,LSD-CS2,not viable,impossible: no headroom,not viable,0,6,231,0.44532,3180.52939834722,239,,,0.0,0.005373429507017136
+BP-ms-10,OSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,294,0.50582,7502.9601047657015,294,,flag>=1,0.2290508661298999,0.5814019441604614
+BP-ms-10,OSD-CS4,not viable,impossible: no headroom,not viable,0,6,67,0.50582,99864.147533545,67,,,0.01641514918782705,0.5426695942878723
+BP-ms-10,LSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,293,0.50582,6966.628524941482,293,,flag>=1,0.24741222931164164,0.5786526799201965
+BP-ms-10,LSD-CS4,viable: cost,impossible: no headroom,viable: cost,0,6,233,0.50582,7123.474249243241,233,,flag>=1,0.24245734902876548,0.5822069644927979
+BP-ms-10,OSD-CS2,not viable,impossible: no headroom,not viable,0,6,67,0.50582,99004.48680018562,67,,,0.01661280911180385,0.5468440055847168
+BP-ms-10,OSD-CS7,not viable,impossible: no headroom,not viable,0,6,65,0.50582,99428.22259085457,65,,,0.016495611142245292,0.5426396727561951
+BP-ms-10,LSD-CS2,viable: cost,impossible: no headroom,viable: cost,0,6,239,0.50582,7102.699736977615,239,,flag>=1,0.242248762052807,0.5796822905540466
+BP-ms-30,OSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,294,0.49082,9964.502697673111,294,,flag>=1,0.4188445876410064,1.02271568775177
+BP-ms-30,OSD-CS4,not viable,impossible: no headroom,not viable,0,6,67,0.49082,102321.74576453834,67,,,0.03997711859525743,0.9545835256576538
+BP-ms-30,LSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,293,0.49082,9428.251046061783,293,,flag>=1,0.4432214185708483,1.017879605293274
+BP-ms-30,LSD-CS4,viable: cost,impossible: no headroom,viable: cost,0,6,233,0.49082,9585.764002194595,233,,flag>=1,0.436366674201882,1.0241317749023438
+BP-ms-30,OSD-CS2,not viable,impossible: no headroom,not viable,0,6,67,0.49082,101463.59175906959,67,,,0.04038495748356741,0.9619265794754028
+BP-ms-30,OSD-CS7,not viable,impossible: no headroom,not viable,0,6,65,0.49082,101886.6244837571,65,,,0.040163441826377544,0.9545308947563171
+BP-ms-30,LSD-CS2,viable: cost,impossible: no headroom,viable: cost,0,6,239,0.49082,9564.582513893814,239,,flag>=1,0.43662208752030907,1.019690752029419
+BP-ps-30,OSD-0,not viable,not viable,not viable,2,6,179,0.09428,11604.318063811645,294,,,0.0,1.956624984741211
+BP-ps-30,OSD-CS4,not viable,not viable,not viable,2,6,55,0.09428,28783.394529002075,67,,,0.0,1.8262767791748047
+BP-ps-30,LSD-0,not viable,not viable,not viable,4,6,180,0.09428,11528.820454185181,293,,,0.0,1.9473726749420166
+BP-ps-30,LSD-CS4,not viable,not viable,not viable,4,6,147,0.09428,11558.771097537232,233,,,0.0,1.9593342542648315
+BP-ps-30,OSD-CS2,not viable,not viable,not viable,2,6,55,0.09428,28620.85728621887,67,,,0.0,1.8403252363204956
+BP-ps-30,OSD-CS7,not viable,not viable,not viable,2,6,54,0.09428,28667.475347376097,65,,,0.0,1.8261760473251343
+BP-ps-30,LSD-CS2,not viable,not viable,not viable,4,6,149,0.09428,11553.573889675903,239,,,0.0,1.9508377313613892
+control-flagged-20%,OSD-0,viable: accuracy,viable: accuracy,not viable,4657,6,4943,0.44532,3335.7136578453255,294,flag>=1,,-0.13579294399028785,0.009218660183250904
+control-flagged-20%,OSD-CS4,viable: accuracy,viable: accuracy,not viable,4659,6,4724,0.44532,59222.12067441515,67,flag>=1,,-0.14102223570356776,0.008604522794485092
+control-flagged-20%,LSD-0,viable: accuracy,viable: accuracy,not viable,4657,6,4942,0.44532,3035.914010273304,293,flag>=1,,-0.13407907499696803,0.009175067767500877
+control-flagged-20%,LSD-CS4,viable: accuracy,viable: accuracy,not viable,4657,6,4884,0.44532,3138.7696431089976,233,flag>=1,,-0.13312635064782796,0.00923142395913601
+control-flagged-20%,OSD-CS2,viable: accuracy,viable: accuracy,not viable,4659,6,4724,0.44532,58719.020589326035,67,flag>=1,,-0.140951808138573,0.008670711889863014
+control-flagged-20%,OSD-CS7,viable: accuracy,viable: accuracy,not viable,4659,6,4722,0.44532,58971.11852219713,65,flag>=1,,-0.14102804869944707,0.008604048751294613
+control-flagged-20%,LSD-CS2,viable: accuracy,viable: accuracy,not viable,4657,6,4890,0.44532,3124.735404334583,239,flag>=1,,-0.13393148924869425,0.009191392920911312
+control-flagged-50%,OSD-0,viable: accuracy,viable: accuracy,not viable,11694,6,11984,0.44532,3338.2541778625296,294,flag>=1,,-0.1355969587041992,0.009644136764109135
+control-flagged-50%,OSD-CS4,viable: accuracy,viable: accuracy,not viable,11699,6,11765,0.44532,59224.66119443235,67,flag>=1,,-0.14101096448973727,0.0090016545727849
+control-flagged-50%,LSD-0,viable: accuracy,viable: accuracy,not viable,11694,6,11983,0.44532,3038.454530290508,293,flag>=1,,-0.1338651851476642,0.009598531760275364
+control-flagged-50%,LSD-CS4,viable: accuracy,viable: accuracy,not viable,11695,6,11925,0.44532,3141.3101631262016,233,flag>=1,,-0.13292023468579361,0.009657490067183971
+control-flagged-50%,OSD-CS2,viable: accuracy,viable: accuracy,not viable,11699,6,11765,0.44532,58721.561109343245,67,flag>=1,,-0.1409404434049879,0.009070898406207561
+control-flagged-50%,OSD-CS7,viable: accuracy,viable: accuracy,not viable,11699,6,11763,0.44532,58973.659042214334,65,flag>=1,,-0.14101672926295228,0.00900115817785263
+control-flagged-50%,LSD-CS2,viable: accuracy,viable: accuracy,not viable,11695,6,11931,0.44532,3127.2759243517876,239,flag>=1,,-0.13372379422824676,0.009615611284971237
+control-any-20%,OSD-0,viable: accuracy,viable: accuracy,not viable,5516,6,5802,0.44532,3335.0989318566703,294,flag>=1,,-0.13592692785631466,0.009715048596262932
+control-any-20%,OSD-CS4,viable: accuracy,viable: accuracy,not viable,5518,6,5583,0.44532,59221.50594842649,67,flag>=1,,-0.1410298353757271,0.009067842736840248
+control-any-20%,LSD-0,viable: accuracy,viable: accuracy,not viable,5516,6,5801,0.44532,3035.299284284649,293,flag>=1,,-0.13422594548547928,0.009669109247624874
+control-any-20%,LSD-CS4,viable: accuracy,viable: accuracy,not viable,5516,6,5743,0.44532,3138.1549171203424,233,flag>=1,,-0.13326822070714672,0.009728500619530678
+control-any-20%,OSD-CS2,viable: accuracy,viable: accuracy,not viable,5518,6,5583,0.44532,58718.405863337386,67,flag>=1,,-0.14095947218751492,0.009137596003711224
+control-any-20%,OSD-CS7,viable: accuracy,viable: accuracy,not viable,5518,6,5581,0.44532,58970.503796208475,65,flag>=1,,-0.14103568077946038,0.00906734261661768
+control-any-20%,LSD-CS2,viable: accuracy,viable: accuracy,not viable,5516,6,5749,0.44532,3124.1206783459284,239,flag>=1,,-0.13407415504485076,0.009686313569545746
+BP-ms-100,OSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,292,0.4768,18388.282625822525,294,,rounds>=3,0.34409508609585704,1.016900897026062
+BP-ms-100,OSD-CS4,viable: cost,impossible: no headroom,viable: cost,0,6,67,0.4768,108184.90971292213,67,,flag>=1,0.0918236778125997,0.9491560459136963
+BP-ms-100,LSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,291,0.4768,17869.50981048073,293,,rounds>=3,0.3545845110741854,1.0120922327041626
+BP-ms-100,LSD-CS4,viable: cost,impossible: no headroom,viable: cost,0,6,231,0.4768,18024.745718566664,233,,rounds>=3,0.35145259058212197,1.0183088779449463
+BP-ms-100,OSD-CS2,viable: cost,impossible: no headroom,viable: cost,0,6,67,0.4768,107350.29010776589,67,,flag>=1,0.0928296613112598,0.9564573168754578
+BP-ms-100,OSD-CS7,viable: cost,impossible: no headroom,viable: cost,0,6,65,0.4768,107778.43140885963,65,,flag>=1,0.09245444672210468,0.9491037130355835
+BP-ms-100,LSD-CS2,viable: cost,impossible: no headroom,viable: cost,0,6,237,0.4768,18003.50004433815,239,,rounds>=3,0.3518522398351396,1.0138931274414062
+BP-ms-5,OSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,294,0.54618,6903.208985784302,294,,flag>=1,0.1621318618481432,0.4712153375148773
+BP-ms-5,OSD-CS4,not viable,impossible: no headroom,not viable,0,6,67,0.54618,99272.61049661682,67,,,0.010555106027024919,0.4398235082626343
+BP-ms-5,LSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,293,0.54618,6366.250842075806,293,,flag>=1,0.17650074261370496,0.4689871072769165
+BP-ms-5,LSD-CS4,viable: cost,impossible: no headroom,viable: cost,0,6,233,0.54618,6523.085178391723,233,,flag>=1,0.17281235039694276,0.47186779975891113
+BP-ms-5,OSD-CS2,not viable,impossible: no headroom,not viable,0,6,67,0.54618,98411.95205119935,67,,,0.010693008842326934,0.443206787109375
+BP-ms-5,OSD-CS7,not viable,impossible: no headroom,not viable,0,6,65,0.54618,98835.98523197815,65,,,0.010605074934305736,0.4397992491722107
+BP-ms-5,LSD-CS2,viable: cost,impossible: no headroom,viable: cost,0,6,239,0.54618,6502.457614014283,239,,flag>=1,0.17234009817761042,0.469821572303772
+peel-naive,OSD-0,not viable,impossible: no headroom,not viable,0,6,294,0.7533,5508.391176223068,294,,,-0.00063728662236473,0.004514779895544052
+peel-naive,OSD-CS4,not viable,impossible: no headroom,not viable,0,6,67,0.7533,97892.61345724846,67,,,-8.322209041655704e-05,0.004214010201394558
+peel-naive,LSD-0,not viable,impossible: no headroom,not viable,0,6,293,0.7533,4968.692222781906,293,,,-0.0006961385126347253,0.004493430722504854
+peel-naive,LSD-CS4,not viable,impossible: no headroom,not viable,0,6,233,0.7533,5123.621730956955,233,,,-0.0006505480209810788,0.004521030932664871
+peel-naive,OSD-CS2,not viable,impossible: no headroom,not viable,0,6,67,0.7533,97028.96200559197,67,,,-8.875692117227274e-05,0.004246425814926624
+peel-naive,OSD-CS7,not viable,impossible: no headroom,not viable,0,6,65,0.7533,97455.09289424674,65,,,-8.324055539032926e-05,0.004213777370750904
+peel-naive,LSD-CS2,not viable,impossible: no headroom,not viable,0,6,239,0.7533,5106.98866657219,239,,,-0.0006746883979869001,0.004501425661146641

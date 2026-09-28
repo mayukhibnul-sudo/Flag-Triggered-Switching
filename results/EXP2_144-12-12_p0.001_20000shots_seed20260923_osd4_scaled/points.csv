@@ -1,0 +1,5 @@
+rounds,shots,unflagged failures,"flagged, blind failures","flagged, sighted failures",unflagged LER,"flagged, blind LER","flagged, sighted LER",ratio_sighted,ratio_blind,flagged_fraction,mean_flags,blind_only_fail,sighted_only_fail
+6,20000,1,2,0,5e-05,0.0001,0.0,nan,2.0,0.8934,2.23235,2,0
+12,10000,1,0,0,0.0001,0.0,0.0,nan,nan,0.9878,4.479,0,0
+18,6667,4,5,0,0.000599970001499925,0.0007499625018749063,0.0,nan,1.25,0.9994000299985001,6.742162891855407,5,0
+24,5000,4,5,0,0.0008,0.001,0.0,nan,1.25,0.9996,9.0048,5,0

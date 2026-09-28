@@ -14,6 +14,7 @@ SwitchPolicy exactly.
 This lives in a plain module, not in notebook cells, because worker processes
 must be able to import it (a hard requirement on Windows).
 """
+import gc
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from math import comb
@@ -25,9 +26,11 @@ import scipy.sparse as sp
 try:
     import numba
     HAVE_NUMBA = True
-except ImportError:          # peeling still works, just slower
+    NUMBA_STATUS = f"numba {numba.__version__}"
+except Exception as _exc:    # peeling still works, just ~100x slower -- say why
     numba = None
     HAVE_NUMBA = False
+    NUMBA_STATUS = f"not available ({type(_exc).__name__}: {_exc})"
 
 
 # =============================================================================
@@ -359,13 +362,34 @@ def chunk_for(shots, workers, checkpoint=False):
 # =============================================================================
 # Decoding every shot with every decoder, in parallel
 # =============================================================================
+_DECODER_CACHE = {}          # per worker process: built once, reused for every chunk
+
+
+def _cached_decoder(name, spec, H, priors):
+    """
+    Build each decoder once per worker process.
+
+    Rebuilding them for every chunk was both slow and the cause of out-of-memory
+    failures: a BP+OSD object for a 648 x 17k matrix is large, and with many
+    workers the peak allocation is (workers x decoders) copies at once.
+    """
+    key = (name, repr(sorted(spec.items())), H.shape, int(H.nnz))
+    dec = _DECODER_CACHE.get(key)
+    if dec is None:
+        _DECODER_CACHE.clear()               # keep at most one decoder alive per process
+        gc.collect()
+        dec = make_decoder(spec, H, priors)
+        _DECODER_CACHE[key] = dec
+    return dec
+
+
 def decode_chunk(task):
     """Worker: decode one chunk of shots with every requested decoder."""
     H, L, priors, det, obs, pairs = task
     L = sp.csr_matrix(L)
     out = {}
     for name, spec in pairs:
-        dec = make_decoder(spec, H, priors)
+        dec = _cached_decoder(name, spec, H, priors)
         n = len(det)
         conv = np.zeros(n, bool)
         fail = np.zeros(n, bool)
@@ -456,16 +480,27 @@ def run_zoo(H, L, priors, det, obs, names, workers=1, chunk_size=CHUNK_SIZE, on_
 
     todo = [i for i, p in enumerate(parts) if p is None]
     backend = "sequential"
-    if workers > 1 and len(todo) > 1:
+    note = ""
+    tried = workers
+    while tried > 1 and [i for i, p in enumerate(parts) if p is None]:
+        todo = [i for i, p in enumerate(parts) if p is None]
         try:
             ctx = mp.get_context("spawn")
-            with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as pool:
+            with ProcessPoolExecutor(max_workers=tried, mp_context=ctx) as pool:
                 futures = {pool.submit(decode_chunk, task(i)): i for i in todo}
                 for f in as_completed(futures):
                     finished(futures[f], f.result())
-            backend = f"parallel ({workers} processes)"
-        except Exception as exc:                 # noqa: BLE001 -- fall back, but say why
-            backend = f"sequential (process pool failed: {type(exc).__name__}: {exc})"
+            backend = f"parallel ({tried} processes){note}"
+            break
+        except Exception as exc:                 # noqa: BLE001
+            # Out of memory is the usual cause: each worker holds its own decoders.
+            # Halve the pool and retry; chunks already finished are kept.
+            note = f"; retried after {type(exc).__name__} at {tried} workers"
+            tried //= 2
+            gc.collect()
+            if tried <= 1:
+                backend = (f"sequential (process pool failed: {type(exc).__name__}: {exc}; "
+                           "try fewer workers, or fewer decoders per run)")
     for i in [i for i, p in enumerate(parts) if p is None]:
         finished(i, decode_chunk(task(i)))
     if resumed:
