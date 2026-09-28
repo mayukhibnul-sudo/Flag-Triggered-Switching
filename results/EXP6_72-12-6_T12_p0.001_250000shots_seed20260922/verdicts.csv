@@ -1,0 +1,17 @@
+weak,strong,verdict,verdict_accuracy,verdict_cost,headroom,min_detectable_discordant,pf_failures,pf_escalation,pf_cost_us,always_failures,best_accuracy_rule,best_cost_rule,best_saving,cost_ratio
+peel,OSD-0,not viable,impossible: no headroom,not viable,0,6,1279,0.444388,3333.738607074262,1345,,,0.0,0.005559879820793867
+peel,OSD-CS4,not viable,impossible: no headroom,not viable,0,6,308,0.444388,59418.105392910205,318,,,0.0,0.0052591594867408276
+peel,LSD-0,not viable,impossible: no headroom,not viable,0,6,1276,0.444388,3021.036246420209,1342,,,0.0,0.005607127211987972
+peel,LSD-CS4,not viable,impossible: no headroom,not viable,0,6,1024,0.444388,3141.52938336308,1077,,,0.0,0.00559604074805975
+BP-ms-10,OSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,1345,0.50432,7426.158102571457,1345,,flag>=1,0.22239792675448866,0.601109504699707
+BP-ms-10,OSD-CS4,not viable,impossible: no headroom,not viable,0,6,318,0.50432,99829.21996399235,318,,,0.01573193354194824,0.5685970187187195
+BP-ms-10,LSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,1342,0.50432,6875.106195498215,1342,,flag>=1,0.24127218927914296,0.6062176823616028
+BP-ms-10,LSD-CS4,viable: cost,impossible: no headroom,viable: cost,0,6,1077,0.50432,7062.532737377609,1077,,flag>=1,0.23500428618466762,0.6050190329551697
+BP-ms-30,OSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,1345,0.489196,9848.6718568385,1345,,flag>=1,0.41271923117159126,0.9986038208007812
+BP-ms-30,OSD-CS4,not viable,impossible: no headroom,not viable,0,6,318,0.489196,102248.42034226819,318,,,0.03893006772881047,0.9445918202400208
+BP-ms-30,LSD-0,viable: cost,impossible: no headroom,viable: cost,0,6,1342,0.489196,9298.384889774048,1342,,flag>=1,0.43800401943593525,1.0070898532867432
+BP-ms-30,LSD-CS4,viable: cost,impossible: no headroom,viable: cost,0,6,1077,0.489196,9485.810232039672,1077,,flag>=1,0.42944888518741153,1.005098581314087
+BP-ps-30,OSD-0,not viable,not viable,not viable,8,6,846,0.095184,11570.61765762523,1345,,,0.0,2.0762691497802734
+BP-ps-30,OSD-CS4,not viable,not viable,not viable,10,6,248,0.095184,28925.579221089585,318,,,0.0,1.9639688730239868
+BP-ps-30,LSD-0,not viable,not viable,not viable,8,6,840,0.095184,11488.276142977767,1342,,,0.0,2.0939130783081055
+BP-ps-30,LSD-CS4,not viable,not viable,not viable,8,6,693,0.095184,11526.736072006332,1077,,,0.0,2.089772939682007

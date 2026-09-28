@@ -16,7 +16,8 @@ ENV/
 *.csv
 *.log
 data/
-results/
+!results/**
+.zip
 
 # IDEs
 .vscode/
