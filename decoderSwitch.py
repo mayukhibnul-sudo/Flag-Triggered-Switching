@@ -54,7 +54,10 @@ def _(mo):
 
     ---
 
-    *One-sentence claim of the thesis goes here.*
+    **Flag qubits pay for themselves as decoder input, not as a switching
+    trigger** — and the trigger idea does not merely underperform here, it is
+    provably unable to help: at 250,000 paired shots the rule "escalate when the
+    primary decoder fails" already matches an omniscient oracle.
     """)
     return
 
@@ -75,7 +78,7 @@ def _(mo):
     8. Statistics and benchmarking
     9. Reproducibility
     10. Implementation status
-    11. Experiments 1-6: validation, flag cost vs information, trigger saturation, ablation, noise sweep, decoder zoo
+    11. Experiments 1-9: validation, flag cost vs information, trigger saturation, ablation, noise sweep, decoder zoo, surface-code baseline, accuracy/latency frontier, dynamic prior updating
     12. Results, discussion, conclusion
     """)
     return
@@ -193,7 +196,7 @@ def _(mo):
     | **arm** | one leg of a controlled comparison: *unflagged*, *flagged blind*, *flagged sighted* |
     | **blind / sighted** | whether the decoder is given the flag detectors (sighted) or they are removed from H (blind) |
     | **r\*** | break-even cost ratio: the weak/strong cost ratio above which a flag rule would be cheaper |
-    | **T\*** | crossover: the round count at which flags stop paying for themselves |
+    | **T\*** | crossover: the round count at which flags stop paying for themselves — *never reached*: the measured ratios are flat over $T = 6$–24, so no fitted T\* is meaningful |
 
     **Decoder names.** `peel` greedy peeling · `BP-ms-N` min-sum belief propagation,
     N iterations · `BP-ps-N` product-sum BP · `OSD-0` BP + ordered statistics,
@@ -946,7 +949,7 @@ def _(np, sp, stim):
         return (mz * rounds + per_round_x * (rounds - 1)
                 + per_round_flags * rounds + mz)
 
-    return build_memory_circuit, expected_num_detectors, flag_detector_mask
+    return build_memory_circuit, check_schedule, expected_num_detectors, flag_detector_mask
 
 
 @app.cell
@@ -1215,6 +1218,450 @@ def _(
     ])
     render_checks("DEM", tests_dem)
     return (tests_dem,)
+
+
+# =============================================================================
+# 5.1 The reference noise model
+# =============================================================================
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 5.1 The reference noise model (Pakhunov, 2026)
+
+    Section 4's circuit is the one the experiments use: it extracts **both** check
+    families, because the flag qubits attach to the X-check ancillas. The
+    reference the literature reports against extracts only **one**. Theorem 1
+    counts $nw$ CNOTs per round; for $[[72,12,6]]$ that is 216, where our circuit
+    applies 432.
+
+    That single difference, not the noise channel, is the whole gap. Measured on
+    the reference circuit at $T = 12$, `DEPOLARIZE2` per CNOT gives
+    $\alpha = 3.56$ against Theorem 2's $3.505$ — 1.6% high. A single X
+    mechanism per CNOT, the most literal reading of the theorem, gives $4.17$
+    instead, 19% high. Theorem 2's $\alpha$ therefore describes a depolarizing
+    channel, which is the one we already had.
+
+    This section builds the reference circuit so the claim in the write-up is a
+    measurement, not an assertion:
+
+    | Theorem | Prediction | Checked against |
+    |---|---|---|
+    | 1 | $N = n(wT + T/2 + 1)$ fault mechanisms | exact fault count |
+    | 2 | $\lambda = \alpha n T p$, $\alpha = 3.505$ | sum of DEM priors |
+    | 3, 5 | $P_{peel} = \exp(-\bar{d}\lambda^2 / 2N)^{A_0}$ | Table II's 93.5% |
+
+    The reference circuit is for **validation only**. It has no flag qubits, so
+    every experiment keeps using `build_memory_circuit`.
+    """)
+    return
+
+
+@app.cell
+def _(check_schedule, dem_to_matrices, np, sp, stim):
+    ALPHA_W3 = 3.505      # Theorem 2, column weight 3, standard superconducting model
+    A0_GROSS = 0.869      # Theorem 5 / Table III, constant across the Gross family
+
+    def theory_faults(code, rounds):
+        """
+        Theorem 1: N = n(wT + T/2 + 1) = nwT CNOT + (n/2)T measurement + n boundary.
+
+        w is the COLUMN weight (qubit degree), not the row weight. The theorem is
+        stated for BB codes, whose column weight is uniform; `uniform` reports
+        whether that holds, so a GB code with |a| != |b| is not silently compared.
+        """
+        cols = np.asarray(code.hz.sum(axis=0)).ravel()
+        w = int(cols[0])
+        return dict(total=int(code.n * (w * rounds + rounds / 2 + 1)),
+                    cnot=int(code.n * w * rounds),
+                    measurement=int(code.n // 2 * rounds),
+                    boundary=int(code.n),
+                    column_weight=w,
+                    uniform=bool((cols == w).all()))
+
+    def theory_lambda(code, rounds, p, alpha=ALPHA_W3):
+        """Theorem 2: expected number of fault mechanisms firing per shot."""
+        return alpha * code.n * rounds * p
+
+    def theory_peel(faults, lam, mean_degree, a0=A0_GROSS):
+        """
+        Theorems 3 and 5: P_peel = exp(-beta lambda^2) ** A0 with beta = d_bar/2N.
+        Evaluated on a circuit's own measured graph, this is what a perfect
+        queue-based peeler should achieve on it.
+        """
+        return float(np.exp(-mean_degree / (2 * faults) * lam ** 2) ** a0)
+
+    def build_reference_circuit(code, rounds, p, extraction="z-only"):
+        """
+        Z-basis memory in the reference model: Z-check extraction only, no flags.
+
+        extraction="both" reproduces section 4's gate count instead, so the two
+        circuits can be compared one axis at a time. Detectors are Z-check only
+        either way, matching build_memory_circuit(x_detectors=False).
+        """
+        if extraction not in ("z-only", "both"):
+            raise ValueError("extraction must be 'z-only' or 'both'")
+        if rounds < 1:
+            raise ValueError("rounds must be >= 1")
+        n, mx, mz = code.n, code.hx.shape[0], code.hz.shape[0]
+        data = list(range(n))
+        zanc = list(range(n, n + mz))
+        xanc = list(range(n + mz, n + mz + mx)) if extraction == "both" else []
+        sz = check_schedule(code.hz, code.lattice)
+        sx = check_schedule(code.hx, code.lattice) if xanc else None
+        hz_rows = [code.hz.indices[code.hz.indptr[i]:code.hz.indptr[i + 1]].tolist()
+                   for i in range(mz)]
+        lz = np.asarray(code.lz, dtype=np.uint8)
+
+        c = stim.Circuit()
+        meas = [0]
+
+        def rec(i):
+            return stim.target_rec(i - meas[0])
+
+        def cx_layer(pairs):
+            flat = [q for pair in pairs for q in pair]
+            c.append("CX", flat)
+            if p > 0:
+                c.append("DEPOLARIZE2", flat, p)
+            c.append("TICK")
+
+        def measure(name, qubits):
+            if not qubits:
+                return []
+            c.append(name, qubits, p) if p > 0 else c.append(name, qubits)
+            start = meas[0]
+            meas[0] += len(qubits)
+            return list(range(start, meas[0]))
+
+        c.append("R", data + zanc)
+        if xanc:
+            c.append("RX", xanc)
+        if p > 0:
+            c.append("X_ERROR", data + zanc, p)     # n boundary + ancilla resets
+        c.append("TICK")
+
+        prev_z = None
+        for t in range(rounds):
+            if xanc:
+                for l in range(sx.shape[0]):
+                    cx_layer([(xanc[r], int(sx[l, r])) for r in range(mx)])
+            for l in range(sz.shape[0]):
+                cx_layer([(int(sz[l, r]), zanc[r]) for r in range(mz)])
+            if xanc:
+                measure("MRX", xanc)
+            z_idx = measure("MR", zanc)
+            if p > 0 and t < rounds - 1:
+                c.append("X_ERROR", zanc, p)
+            for i in range(mz):
+                tg = [rec(z_idx[i])] + ([rec(prev_z[i])] if t > 0 else [])
+                c.append("DETECTOR", tg, [i, t, 0])
+            c.append("TICK")
+            prev_z = z_idx
+
+        d_idx = measure("M", data)
+        for i in range(mz):
+            c.append("DETECTOR",
+                     [rec(d_idx[q]) for q in hz_rows[i]] + [rec(prev_z[i])],
+                     [i, rounds, 3])
+        for j in range(lz.shape[0]):
+            c.append("OBSERVABLE_INCLUDE",
+                     [rec(d_idx[q]) for q in np.flatnonzero(lz[j])], j)
+        return c
+
+    def reference_report(code, rounds, p, extraction="z-only"):
+        """Measured DEM quantities beside what Theorems 1, 2, 3 and 5 predict."""
+        circ = build_reference_circuit(code, rounds, p, extraction=extraction)
+        H, _L, priors = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
+        th = theory_faults(code, rounds)
+        lam = float(priors.sum())
+        Hb = (H > 0).astype(np.int8)
+        G = (Hb.T @ Hb).tocsr()
+        deg = float((np.diff(G.indptr) - 1).mean())
+        return dict(detectors=int(H.shape[0]), faults=int(H.shape[1]),
+                    theory_faults=th["total"], fault_ratio=H.shape[1] / th["total"],
+                    lam=lam, theory_lambda=theory_lambda(code, rounds, p),
+                    lambda_ratio=lam / theory_lambda(code, rounds, p),
+                    mean_degree=deg,
+                    theory_peel=theory_peel(H.shape[1], lam, deg),
+                    uniform_weight=th["uniform"])
+
+    # Table II of Pakhunov (2026), "Actual" column: peeling success at p = 1e-3.
+    TABLE_II = {("[[72, 12, 6]]", 12): 0.935,
+                ("[[144, 12, 12]]", 12): 0.879,
+                ("[[288, 12, 18]]", 12): 0.778}
+
+    return (ALPHA_W3, A0_GROSS, TABLE_II, build_reference_circuit,
+            reference_report, theory_faults, theory_lambda, theory_peel)
+
+
+@app.cell
+def _(
+    BB_PRESETS,
+    TABLE_II,
+    bb_from_preset,
+    build_reference_circuit,
+    reference_report,
+    render_checks,
+    run_checks,
+    theory_faults,
+):
+    def _code(key="[[72, 12, 6]]"):
+        return bb_from_preset(key, BB_PRESETS)
+
+    def _theorem_1_is_exact():
+        """The reference circuit must hold EXACTLY n(wT + T/2 + 1) fault mechanisms."""
+        for key, T in [("[[72, 12, 6]]", 3), ("[[72, 12, 6]]", 6), ("[[72, 12, 6]]", 12),
+                       ("[[144, 12, 12]]", 6)]:
+            c = _code(key)
+            r = reference_report(c, T, 1e-3)
+            assert r["faults"] == r["theory_faults"], \
+                f"{key} T={T}: {r['faults']} faults, Theorem 1 says {r['theory_faults']}"
+
+    def _theorem_2_lambda():
+        # alpha is quoted for T = 12; the boundary term 1/T inflates small T
+        for T in (6, 12):
+            r = reference_report(_code(), T, 1e-3)
+            assert 0.90 <= r["lambda_ratio"] <= 1.10, \
+                f"T={T}: lambda {r['lam']:.2f} vs theory {r['theory_lambda']:.2f}"
+
+    def _mean_degree_matches_paper():
+        # the paper reports d_bar = 52.3 for the Gross family at T = 12
+        for key in ("[[72, 12, 6]]", "[[144, 12, 12]]"):
+            r = reference_report(_code(key), 12, 1e-3)
+            assert 45 <= r["mean_degree"] <= 60, f"{key}: d_bar = {r['mean_degree']:.1f}"
+
+    def _analytic_peel_reproduces_table_ii():
+        """The headline validation: Theorems 3 and 5 on our own graph must land on
+        Table II. This is what lets section 3.3 claim reproduction."""
+        for key, T in [("[[72, 12, 6]]", 12), ("[[144, 12, 12]]", 12)]:
+            r = reference_report(_code(key), T, 1e-3)
+            target = TABLE_II[(key, T)]
+            assert abs(r["theory_peel"] - target) < 0.02, \
+                f"{key}: predicted {r['theory_peel']:.3f} against Table II {target:.3f}"
+
+    def _experiment_circuit_deviates_on_purpose():
+        """Section 4's circuit extracts both families, so it must NOT match Theorem 1.
+        Asserting the deviation keeps the two circuits from being confused."""
+        r = reference_report(_code(), 12, 1e-3, extraction="both")
+        assert r["fault_ratio"] > 1.3, \
+            f"both-family circuit unexpectedly matches theory (ratio {r['fault_ratio']:.2f})"
+
+    def _reference_circuit_is_well_formed():
+        c = _code()
+        clean = build_reference_circuit(c, 4, 0.0)
+        det, obs = clean.compile_detector_sampler(seed=5).sample(
+            32, separate_observables=True)
+        assert not det.any() and not obs.any(), "noiseless reference circuit fires"
+        assert clean.num_observables == c.k
+        build_reference_circuit(c, 4, 1e-3).detector_error_model(decompose_errors=False)
+
+    def _non_uniform_weight_is_flagged():
+        # Theorem 1 assumes a uniform column weight; a GB code with |a| != |b| is not
+        gb = theory_faults(_code(), 6)
+        assert gb["uniform"] and gb["column_weight"] == 3
+
+    tests_reference = run_checks([
+        ("reference circuit is well formed and silent at p = 0", _reference_circuit_is_well_formed),
+        ("Theorem 1 fault count is reproduced exactly", _theorem_1_is_exact),
+        ("Theorem 2 lambda is reproduced within 10%", _theorem_2_lambda),
+        ("mean fault-graph degree matches the paper's 52.3", _mean_degree_matches_paper),
+        ("analytic peeling prediction reproduces Table II", _analytic_peel_reproduces_table_ii),
+        ("section 4's circuit deviates from Theorem 1, as designed",
+         _experiment_circuit_deviates_on_purpose),
+        ("column-weight uniformity is reported", _non_uniform_weight_is_flagged),
+    ])
+    render_checks("5.1 reference model", tests_reference)
+    return (tests_reference,)
+
+
+# =============================================================================
+# 5.2 Surface-code baseline
+# =============================================================================
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 5.2 Surface-code baseline
+
+    `build_memory_circuit` cannot build a surface code. Its CNOT schedule orders
+    each check's data qubits by **lattice offset**, which is what makes every
+    layer a permutation — and that relies on translation invariance on a torus.
+    A surface code has boundaries, so its checks do not all share one offset
+    pattern and `check_schedule` raises.
+
+    Stim generates these circuits natively, so the baseline costs almost nothing:
+    the generated circuit goes through the same `dem_to_matrices` and the same
+    decoders. Only the circuit construction differs.
+
+    The contrast is worth stating in its own right. A surface-code DEM decomposes
+    into graphlike components — every fault has at most two symptoms, which is
+    what lets matching decoders work — while a BB DEM does not. That is the
+    structural reason this thesis needs BP+OSD rather than MWPM, and the test
+    below asserts it rather than leaving it as a claim.
+    """)
+    return
+
+
+@app.cell
+def _(dem_to_matrices, np, stim):
+    def surface_code_problem(distance, rounds, p, basis="Z"):
+        """
+        Rotated surface-code memory as a decoding problem, in Stim's own circuit.
+
+        Returns the same (circuit, H, L, priors) shape the BB path produces, so a
+        baseline run reuses the decoders and metrics unchanged. Detectors number
+        (d^2 - 1) * rounds and there is exactly one logical observable.
+        """
+        if basis.upper() not in ("X", "Z"):
+            raise ValueError("basis must be 'X' or 'Z'")
+        if distance < 3 or distance % 2 == 0:
+            raise ValueError("rotated surface code needs an odd distance >= 3")
+        circ = stim.Circuit.generated(
+            f"surface_code:rotated_memory_{basis.lower()}",
+            distance=distance, rounds=rounds,
+            after_clifford_depolarization=p,
+            after_reset_flip_probability=p,
+            before_measure_flip_probability=p,
+            before_round_data_depolarization=p)
+        H, L, priors = dem_to_matrices(
+            circ.detector_error_model(decompose_errors=False))
+        return dict(circuit=circ, H=H, L=L, priors=priors,
+                    distance=distance, rounds=rounds, p=p, basis=basis.upper(),
+                    name=f"surface d={distance}")
+
+    def is_graphlike(circuit):
+        """
+        True when every fault mechanism has at most two symptoms, i.e. the DEM is a
+        matching graph. Surface codes are; bivariate bicycle codes are not, which
+        is why this thesis uses BP+OSD instead of MWPM.
+        """
+        try:
+            circuit.detector_error_model(decompose_errors=True)
+            return True
+        except ValueError:
+            return False
+
+    def dem_mean_degree(H):
+        """Mean number of other faults sharing a detector with a given fault."""
+        Hb = (H > 0).astype(np.int8)
+        G = (Hb.T @ Hb).tocsr()
+        return float((np.diff(G.indptr) - 1).mean())
+
+    return dem_mean_degree, is_graphlike, surface_code_problem
+
+
+@app.cell
+def _(
+    BB_PRESETS,
+    BpOsdDecoder,
+    bb_from_preset,
+    build_memory_circuit,
+    dem_mean_degree,
+    dem_to_matrices,
+    is_graphlike,
+    np,
+    plot_surface_sweep,
+    render_checks,
+    run_checks,
+    surface_code_problem,
+    surface_sweep_point,
+    threshold_estimate,
+):
+    def _builds_at_every_distance():
+        for d in (3, 5, 7):
+            for T in (3, 6):
+                pr = surface_code_problem(d, T, 1e-3)
+                assert pr["circuit"].num_detectors == (d * d - 1) * T, \
+                    f"d={d} T={T}: {pr['circuit'].num_detectors} detectors"
+                assert pr["circuit"].num_observables == 1
+                assert pr["H"].shape == (pr["circuit"].num_detectors, pr["L"].shape[1])
+
+    def _rejects_bad_parameters():
+        for bad in (dict(distance=4, rounds=3, p=1e-3), dict(distance=2, rounds=3, p=1e-3)):
+            try:
+                surface_code_problem(**bad)
+            except ValueError:
+                continue
+            raise AssertionError(f"accepted {bad}")
+
+    def _noiseless_is_silent():
+        pr = surface_code_problem(5, 3, 0.0)
+        det, obs = pr["circuit"].compile_detector_sampler(seed=4).sample(
+            32, separate_observables=True)
+        assert not det.any() and not obs.any()
+
+    def _decodes_with_the_same_decoder():
+        pr = surface_code_problem(5, 3, 2e-3)
+        dec = BpOsdDecoder(pr["H"], pr["priors"], osd_order=0)
+        det = pr["circuit"].compile_detector_sampler(seed=6).sample(40).astype(np.uint8)
+        for sdr in det:
+            r = dec.decode(sdr)
+            assert np.array_equal((pr["H"] @ np.asarray(r.correction, np.uint8)) % 2, sdr), \
+                "surface-code correction does not reproduce its syndrome"
+
+    def _surface_is_graphlike_and_bb_is_not():
+        """The structural reason this thesis cannot use a matching decoder."""
+        assert is_graphlike(surface_code_problem(5, 3, 1e-3)["circuit"]), \
+            "surface-code DEM should decompose into graphlike components"
+        bb = build_memory_circuit(bb_from_preset("[[72, 12, 6]]", BB_PRESETS), 3, 1e-3)
+        assert not is_graphlike(bb), \
+            "a BB DEM decomposed into graphlike components: check the circuit"
+
+    def _surface_graph_is_far_sparser():
+        """Quantifies the contrast: a BB fault graph is an order of magnitude denser."""
+        surf = dem_mean_degree(surface_code_problem(5, 6, 1e-3)["H"])
+        c = bb_from_preset("[[72, 12, 6]]", BB_PRESETS)
+        bb_H, _L, _pr = dem_to_matrices(
+            build_memory_circuit(c, 6, 1e-3).detector_error_model(decompose_errors=False))
+        bb = dem_mean_degree(bb_H)
+        assert surf < bb / 3, \
+            f"surface mean degree {surf:.1f} not far below BB's {bb:.1f}"
+
+    def _sweep_point_runs_end_to_end():
+        """The Experiment 7 runner, at its cheapest, so a long sweep cannot fail late."""
+        pt = surface_sweep_point(3, 3, 3e-3, 200, seed=11, osd_order=0, workers=1)
+        assert pt["distance"] == 3 and pt["shots"] == 200
+        assert 0 <= pt["ler"] <= 1 and pt["ci_low"] <= pt["ler"] <= pt["ci_high"]
+        assert pt["failures"] == round(pt["ler"] * 200)
+        assert pt["detectors"] == (3 * 3 - 1) * 3
+        assert pt["time_p50_us"] > 0
+
+    def _threshold_estimate_finds_a_crossing():
+        # synthetic: d=7 beats d=5 below 3e-3 and loses above it
+        pts = []
+        for p, l5, l7 in [(1e-3, 1e-2, 3e-3), (3e-3, 4e-2, 4e-2), (1e-2, 1e-1, 2e-1)]:
+            pts.append(dict(distance=5, p=p, ler=l5))
+            pts.append(dict(distance=7, p=p, ler=l7))
+        t = threshold_estimate(pts)
+        assert t is not None and 1e-3 <= t <= 1e-2, f"threshold {t}"
+        # no crossing -> None, rather than a fabricated number
+        flat = [dict(distance=d, p=p, ler=1e-2 if d == 5 else 1e-3)
+                for d in (5, 7) for p in (1e-3, 3e-3)]
+        assert threshold_estimate(flat) is None
+        assert threshold_estimate([dict(distance=3, p=1e-3, ler=1e-2)]) is None
+
+    def _sweep_plot_renders():
+        import io
+        pts = [dict(distance=d, p=p, ler=1e-3 * d, ci_low=5e-4 * d, ci_high=2e-3 * d,
+                    failures=10, shots=1000)
+               for d in (3, 5, 7) for p in (1e-3, 3e-3)]
+        fig = plot_surface_sweep(pts)
+        fig.savefig(io.BytesIO(), format="png")
+
+    tests_surface = run_checks([
+        ("builds at d = 3, 5, 7 with the expected detector count", _builds_at_every_distance),
+        ("even or too-small distances are rejected", _rejects_bad_parameters),
+        ("noiseless circuit fires nothing", _noiseless_is_silent),
+        ("decodes with the same BP+OSD decoder, corrections consistent",
+         _decodes_with_the_same_decoder),
+        ("surface DEM is graphlike, BB DEM is not", _surface_is_graphlike_and_bb_is_not),
+        ("surface fault graph is far sparser than a BB one", _surface_graph_is_far_sparser),
+        ("Experiment 7 sweep point runs end to end", _sweep_point_runs_end_to_end),
+        ("threshold estimate finds a crossing and refuses to invent one",
+         _threshold_estimate_finds_a_crossing),
+        ("surface sweep plot renders", _sweep_plot_renders),
+    ])
+    render_checks("5.2 surface baseline", tests_surface)
+    return (tests_surface,)
 
 
 @app.cell(hide_code=True)
@@ -1553,9 +2000,12 @@ def _(mo):
     | `flag_or_fail` | same as `flag`; kept separate so ablations can differ |
 
     **Beating `always` is possible.** A policy can fail less than `always` when
-    the primary is right on shots where the secondary errs: Experiment 4 at 25,000 shots
-    found peeling correct and BP+OSD-0 wrong on 14 shots, and never the reverse.
-    So a policy beating `always` is not automatically a bug, but it must be
+    the primary is right on shots where the secondary errs. Over 250,000 shots on
+    [[72,12,6]] at $T = 12$, peeling converged and was correct where BP+OSD-0 was
+    wrong on **66** shots, and converged-but-wrong where BP+OSD-0 was right on
+    **0** — so `primary_fail` keeps 66 answers that `always` would have thrown
+    away and loses none. That is the whole of its 0.00512 against 0.00538 margin.
+    A policy beating `always` is therefore not automatically a bug, but it must be
     confirmed with a paired test on identical shots (Experiment 6 does this).
     """)
     return
@@ -1627,7 +2077,7 @@ def _():
 
 
 @app.cell
-def _(DecodeResult, SwitchPolicy, np, render_checks, run_checks):
+def _(DecodeResult, SwitchPolicy, dz, np, render_checks, run_checks):
     class _Mock:
         """Stub decoder: fixed convergence, counts its calls."""
         def __init__(self, converged):
@@ -1682,6 +2132,44 @@ def _(DecodeResult, SwitchPolicy, np, render_checks, run_checks):
                 continue
             raise AssertionError(f"accepted invalid config {bad}")
 
+    def _beating_always_is_representable():
+        """
+        Section 7 states that a policy CAN fail less than `always`, because the
+        primary may be right where the secondary errs. The accounting has to be
+        able to express that: a reader who believes the opposite might "fix" it.
+
+        One shot, primary right and secondary wrong. primary_fail keeps the
+        primary's answer, so it must record fewer failures than always.
+        """
+        n = 4
+        weak = dict(conv=np.ones(n, bool), fail=np.zeros(n, bool),
+                    work=np.ones(n, np.int64), time_us=np.ones(n))
+        strong = dict(conv=np.ones(n, bool), fail=np.zeros(n, bool),
+                      work=np.ones(n, np.int64), time_us=np.ones(n))
+        strong["fail"][2] = True                      # the secondary errs on shot 2
+        none = np.zeros(n, bool)
+        pf = dz.derive(weak, strong, none, True)      # primary_fail
+        always = dz.derive(weak, strong, np.ones(n, bool), True)
+        assert int(pf["fail"].sum()) == 0, "primary_fail should keep the primary's answer"
+        assert int(always["fail"].sum()) == 1, "always should inherit the secondary's error"
+        assert pf["fail"].sum() < always["fail"].sum(), \
+            "the accounting cannot express a policy beating `always` -- see section 7"
+
+    def _escalating_a_correct_primary_can_harm():
+        """The mirror image: a pre-decode trigger that fires on that same shot
+        converts a success into a failure. This is the `harm` column of §11.6."""
+        n = 4
+        weak = dict(conv=np.ones(n, bool), fail=np.zeros(n, bool),
+                    work=np.ones(n, np.int64), time_us=np.ones(n))
+        strong = dict(conv=np.ones(n, bool), fail=np.zeros(n, bool),
+                      work=np.ones(n, np.int64), time_us=np.ones(n))
+        strong["fail"][2] = True
+        pre = np.zeros(n, bool)
+        pre[2] = True                                  # the flag fires on that shot
+        flagged = dz.derive(weak, strong, pre, True)
+        assert int(flagged["fail"].sum()) == 1, "escalating a correct primary should harm"
+        assert flagged["cost"][2] == 1.0, "a pre-escalated shot must not pay the primary"
+
     tests_switch = run_checks([
         ("never: secondary is never called", _never),
         ("always: primary is never called", _always),
@@ -1689,6 +2177,10 @@ def _(DecodeResult, SwitchPolicy, np, render_checks, run_checks):
         ("flag triggers: a fired flag skips the primary pass", _flag_skips_primary),
         ("flag triggers: unflagged shots fall back to primary_fail", _flag_fallback),
         ("invalid trigger or missing flag mask raises ValueError", _validation),
+        ("a policy beating `always` is representable, not a bug",
+         _beating_always_is_representable),
+        ("escalating a correct primary is recorded as harm, and skips its cost",
+         _escalating_a_correct_primary_can_harm),
     ])
     render_checks("switch policies", tests_switch)
     return (tests_switch,)
@@ -2698,7 +3190,10 @@ def _(
     tests_exp2,
     tests_gb,
     tests_gf2,
+    tests_planning,
+    tests_reference,
     tests_repro,
+    tests_surface,
     tests_stats,
     tests_switch,
     tests_exp6,
@@ -2706,9 +3201,12 @@ def _(
     _sections = [
         ("2. GF(2)", tests_gf2), ("3. BB codes", tests_codes), ("3. GB codes", tests_gb),
         ("4. Circuit", tests_circuit), ("5. DEM", tests_dem),
+        ("5.1 Reference model", tests_reference),
+        ("5.2 Surface baseline", tests_surface),
         ("6. Decoders", tests_decoders), ("7. Switch policies", tests_switch),
         ("8. Statistics", tests_stats), ("9. Reproducibility", tests_repro),
         ("9b. Export & resume", tests_export),
+        ("10.1 Planning & scope", tests_planning),
         ("11.2 Flag cost vs information", tests_exp2),
         ("11.4-11.5 Experiment drivers", tests_experiments),
         ("11.6 Decoder zoo", tests_exp6),
@@ -2729,38 +3227,189 @@ def _(
     return (core_ready,)
 
 
+# =============================================================================
+# 10.1 Scope
+# =============================================================================
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 10.1 Scope: what is simulated and what is not
+
+    Stated here so a reader meets it before the results rather than after.
+
+    **Real, and the results stand on it.** The decoders are production
+    implementations — BP+OSD is Roffe's `ldpc` package, the same one the BB-code
+    literature uses — and every correction they return really does reproduce its
+    syndrome. The noise is Stim circuit-level noise, gate by gate, not a
+    code-capacity or phenomenological approximation. Failures are scored as
+    $L\hat{e} \neq \text{obs}$ against Stim's own sampled observables. The
+    switching logic is the real control flow, in the real order.
+
+    So the logical error rates, escalation rates, silent-failure counts and the
+    saturation curve are physically meaningful quantities.
+
+    **Idealised, and claims must be bounded accordingly.**
+
+    - **Timing is CPU wall-clock, not latency.** `time.perf_counter()` around a
+      Python call, measured while other worker processes compete for cores. The
+      same peeling loop is ~45x faster in Rust and faster again on an FPGA. Use
+      these numbers as a **ratio** between decoders, never as an achievable
+      latency. The breakeven criterion is expressed as a ratio for exactly this
+      reason, and is the part that transfers.
+    - **The pipeline is offline, not streaming.** A whole $T$-round block is
+      sampled, then decoded. A real decoder must decode round $t$ while round
+      $t+1$ is being measured, so the backlog problem is *motivation* here and
+      was never measured.
+    - **The flag is a detector bit, not a hardware signal.** Routing it to the
+      controller before the primary starts is itself a latency this work does
+      not model.
+    - **Policies are derived, not executed.** Experiments 4 and 6 decode each
+      shot once per decoder and then select. That is provably identical for
+      outcomes — a test asserts it shot by shot — but the reported cost is a
+      reconstruction, not an observation.
+
+    Not modelled at all: pipelining, leakage, crosstalk, drift, readout latency.
+    """)
+    return
+
+
+@app.cell
+def _(np):
+    def shots_for_failures(ler, target=50, floor=2000, cap=None):
+        """
+        Shots needed to observe about `target` failures at a given logical error
+        rate. Precision on a rate is set by the FAILURE count, not the shot count:
+        ~10 failures place a point on a trend, ~30 make it plottable, ~100 make it
+        quotable. Floored so no point is too small to resolve anything, and capped
+        when a budget is fixed.
+        """
+        if not 0 < ler <= 1:
+            raise ValueError(f"ler must be in (0, 1], got {ler}")
+        n = int(max(floor, round(target / ler)))
+        return int(min(n, cap)) if cap else n
+
+    def wilson_halfwidth(ler, shots, z=1.96):
+        """Half-width of the Wilson interval, for sizing a run before paying for it."""
+        d = 1 + z * z / shots
+        return float(z * np.sqrt(ler * (1 - ler) / shots + z * z / (4 * shots ** 2)) / d)
+
+    return shots_for_failures, wilson_halfwidth
+
+
+@app.cell
+def _(
+    BB_PRESETS,
+    BpOsdDecoder,
+    PeelingDecoder,
+    bb_from_preset,
+    build_memory_circuit,
+    dem_to_matrices,
+    np,
+    render_checks,
+    run_checks,
+    shots_for_failures,
+    theory_faults,
+    wilson_halfwidth,
+):
+    def _planner_arithmetic():
+        assert shots_for_failures(1e-2, target=50, floor=0) == 5000
+        assert shots_for_failures(1e-3, target=50, floor=0) == 50000
+        assert shots_for_failures(1e-1, target=50, floor=2000) == 2000, "floor ignored"
+        assert shots_for_failures(1e-3, target=50, cap=10000) == 10000, "cap ignored"
+        for bad in (0.0, -1, 2.0):
+            try:
+                shots_for_failures(bad)
+            except ValueError:
+                continue
+            raise AssertionError(f"accepted ler={bad}")
+
+    def _planner_is_monotone():
+        ns = [shots_for_failures(l, floor=0) for l in (1e-1, 1e-2, 1e-3, 1e-4)]
+        assert ns == sorted(ns), f"rarer failures must need more shots: {ns}"
+
+    def _halfwidth_shrinks_with_shots():
+        hw = [wilson_halfwidth(3e-3, n) for n in (1000, 10000, 100000)]
+        assert hw == sorted(hw, reverse=True), hw
+        # the planner's own recommendation should give a usable interval
+        n = shots_for_failures(3e-3, target=50)
+        assert wilson_halfwidth(3e-3, n) < 3e-3, "50 failures should resolve the rate"
+
+    def _gross_code_runs_end_to_end():
+        """
+        [[144, 12, 12]] at T = 12 is a headline run: 150,000 shots at p = 1e-3
+        gave the 5.91x sighted gain of section 12. This is the cheap guard for it:
+        if the pipeline is going to fail on the Gross code, it fails here in
+        seconds rather than hours in.
+        """
+        c = bb_from_preset("[[144, 12, 12]]", BB_PRESETS)
+        # built the way the experiments build it: corrected detector convention
+        circ = build_memory_circuit(c, 12, 1e-3, use_flags=True, x_detectors=False)
+        H, L, pr = dem_to_matrices(circ.detector_error_model(decompose_errors=False))
+        ratio = H.shape[1] / theory_faults(c, 12)["total"]
+        assert ratio < 3, (f"Gross DEM is {ratio:.1f}x the analytic fault count "
+                           "-- x_detectors is probably on")
+        det, obs = circ.compile_detector_sampler(seed=8).sample(
+            24, separate_observables=True)
+        det, obs = det.astype(np.uint8), obs.astype(np.uint8)
+        peel, osd = PeelingDecoder(H, pr), BpOsdDecoder(H, pr, osd_order=0)
+        for sdr in det:
+            rp, ro = peel.decode(sdr), osd.decode(sdr)
+            if rp.converged:
+                assert np.array_equal((H @ np.asarray(rp.correction, np.uint8)) % 2, sdr)
+            assert np.array_equal((H @ np.asarray(ro.correction, np.uint8)) % 2, sdr)
+
+    tests_planning = run_checks([
+        ("shot planner arithmetic, floor, cap and validation", _planner_arithmetic),
+        ("rarer failures require more shots", _planner_is_monotone),
+        ("Wilson half-width shrinks, and 50 failures resolve the rate",
+         _halfwidth_shrinks_with_shots),
+        ("[[144, 12, 12]] decodes end to end before a long run", _gross_code_runs_end_to_end),
+    ])
+    render_checks("10.1 planning and scope", tests_planning)
+    return (tests_planning,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 11. Experiments
 
-    The six experiments run in the order below, and that is the order they are
+    The nine experiments run in the order below, and that is the order they are
     laid out in: each one answers a question the next one depends on. The shared
     configuration, drivers and saved-run loader are defined just above, so any
     experiment can be run on its own.
 
-    | § | | asks |
-    |--:|:--|:--|
-    | 11.1 | **Experiment 1 — validation** | does this pipeline reproduce known results, and what do the flags cost? |
-    | 11.2 | **Experiment 2 — flag cost vs information** | is the information the flags carry worth the hardware they need? |
-    | 11.3 | **Experiment 3 — trigger saturation** | does a block-level flag rule still discriminate as $T$ grows? |
-    | 11.4 | **Experiment 4 — trigger ablation** | all five triggers on the same shots, at one $p$ |
-    | 11.5 | **Experiment 5 — noise sweep** | logical error rate and escalation against $p$ |
-    | 11.6 | **Experiment 6 — decoder zoo** | every weak × strong pair against eight trigger rules |
+    | § | | asks | answer |
+    |--:|:--|:--|:--|
+    | 11.1 | **Experiment 1 — validation** | does this pipeline reproduce known results, and what do the flags cost? | yes, on three codes; read by the decoder the flags **improve** LER 2.06× |
+    | 11.2 | **Experiment 2 — flag cost vs information** | is the information the flags carry worth the hardware they need? | **yes** — 2.0× on [[72,12,6]], 5.9× on [[144,12,12]] |
+    | 11.3 | **Experiment 3 — trigger saturation** | does a block-level flag rule still discriminate as $T$ grows? | no — 99% of shots flag by $T = 24$ |
+    | 11.4 | **Experiment 4 — trigger ablation** | all five triggers on the same shots, at one $p$ | `primary_fail` wins everywhere |
+    | 11.5 | **Experiment 5 — noise sweep** | logical error rate and escalation against $p$ | identical LER, and `primary_fail` escalates far less as $p$ falls |
+    | 11.6 | **Experiment 6 — decoder zoo** | every weak × strong pair against eight trigger rules | **no viable pair** in 250,000 shots |
+    | 11.7 | **Experiment 7 — surface-code baseline** | does the pipeline find a threshold everyone agrees on? | yes — 1.07%, against a ~1% literature value |
+    | 11.8 | **Experiment 8 — accuracy/latency frontier** | which way of spending the budget — flag rows, flag priors or OSD order — lands on the frontier? | prior updating dominates; OSD order alone saturates at 3.8e-3 |
+    | 11.9 | **Experiment 9 — dynamic prior updating** | can the flags be used without adding rows to $H$? | **yes, and better** — 37× lower LER than flag rows, on half the matrix |
 
     Experiment 1 comes first because nothing after it means anything if the
     fault model is wrong: it is the check that this notebook's detector error
     model matches the published one. Experiments 2 and 3 characterise the
     trigger itself — what it costs and how much it discriminates — before
-    Experiments 4 and 6 spend hours measuring what it buys.
+    Experiments 4 and 6 spend hours measuring what it buys. Experiment 7 checks
+    the whole pipeline against a code family with no stake in the argument, and
+    Experiment 8 asks whether Experiment 2's gain survives being priced against
+    the cheapest alternative. Experiment 9 tests the other half of the thesis
+    title: using the flag outcomes to update the fault priors rather than to add
+    rows to the check matrix.
 
     **Detector convention.** Every experiment defaults to `x_detectors=False`.
     This is a Z-basis memory, so the observables are Z-type and only X errors
-    can flip them; X-check detectors report Z errors, which never can. Keeping
-    them multiplies the fault count by about ten, drives the mean fault-graph
-    degree from ~130 to ~1,400, and cripples peeling, which is collision-limited.
-    Section 4 documents the full two-basis contract, and the switch in the
-    configuration panel turns it back on when you want to reproduce it.
+    can flip them; X-check detectors report Z errors, which never can. On
+    [[72,12,6]] at $T = 12$, keeping them takes the fault count from 4,392 to
+    33,552 and the mean fault-graph degree from 128 to 1,356, which cripples
+    peeling — it is collision-limited. Section 4 documents the full two-basis
+    contract, and the switch in the configuration panel turns it back on when
+    you want to reproduce it.
     """)
     return
 
@@ -2794,7 +3443,7 @@ def _(
                mo.hstack([ui_workers, ui_xdet]),
                mo.md("*Decoding runs in parallel from about 2,000 shots upward; below that "
                      "the per-process setup costs more than it saves.*"),
-               mo.md('*X-check detectors: off is the corrected model. A Z-basis memory has Z-type observables, so X-check detectors only ever report Z errors, which cannot flip those observables — keeping them multiplies the DEM by about 10x, cripples peeling and slows every decoder. Turn it on only to reproduce the full two-basis detector contract of section 4.*')])
+               mo.md('*X-check detectors: off is the corrected model. A Z-basis memory has Z-type observables, so X-check detectors only ever report Z errors, which cannot flip those observables — keeping them multiplies the DEM by roughly an order of magnitude (33,552 faults against 4,392 at T=12), cripples peeling and slows every decoder. Turn it on only to reproduce the full two-basis detector contract of section 4.*')])
     return ui_code, ui_flags, ui_osd, ui_p, ui_rounds, ui_seed, ui_shots, ui_workers, ui_xdet
 
 
@@ -3026,19 +3675,26 @@ def _(mo):
 
     **Check 1 — how big is our fault model?** Pakhunov (2026) gives the number of DEM
     fault mechanisms for a BB memory as $n(wT + T/2 + 1)$ under his noise model.
-    Ours uses full two-qubit depolarising noise, so it is denser. This check
-    reports the ratio, which tells you how far the two models are apart and
-    therefore how much of a published number you should expect to reproduce.
+    Ours is 1.42× denser, and §5.1 identifies why: the experiment circuit extracts
+    **both** check families, because the flag qubits attach to the X-check ancillas,
+    where the reference extracts one. The channel is not the cause — the same
+    `DEPOLARIZE2` noise on the reference circuit reproduces the theorem exactly.
 
-    **Check 2 — do we reproduce a published number?** Enter a literature figure (for
-    example, peeling resolving 93.5% of shots on [[72, 12, 6]] at $p=10^{-3}$,
-    $T=12$) and this reports ours with a 95% interval and whether the two agree.
-    A disagreement is informative, not fatal: with Check 1 in hand you can say *why*.
+    **Check 2 — do we reproduce a published number?** Measured on §5.1's reference
+    circuit, the Theorem 3/5 prediction evaluated on our own fault graph lands on
+    Table II for all three Gross-family codes: 0.935 against 0.935, 0.874 against
+    0.879, 0.764 against 0.778. What the check reports is therefore split in two —
+    2a, whether the model reproduces the literature (it does), and 2b, how far our
+    peeling implementation falls short of that model (+0.032, +0.073, +0.117 as $n$
+    grows). The second gap is a decoder result, not a modelling error.
 
     **Check 3 — what do the flags cost?** Flag qubits add ancillas and CNOTs, so they
     add noise. This decodes the same configuration with and without flags using
-    the same strong decoder and compares the logical error rates. If flags make
-    accuracy worse, a flag trigger has to buy back that loss before it can help.
+    the same strong decoder and compares the logical error rates. **Measured:** with
+    the decoder reading the flag detectors the flagged circuit is 2.06× *better*,
+    so there is no accuracy loss for a trigger to buy back. The hardware cost is
+    real but shows up only when the flag outcomes are hidden — which is what
+    Experiment 2's blind arm isolates.
 
     *Important:* this section does not reimplement anyone else's noise model. It
     measures the distance between ours and a published reference, which is what a
@@ -3061,7 +3717,8 @@ def _(mo):
 
 
 @app.cell
-def _(build_memory_circuit, code_from_key, dem_to_matrices, dz, flag_detector_mask, np, wilson):
+def _(build_memory_circuit, build_reference_circuit, code_from_key, dem_to_matrices, dz,
+      flag_detector_mask, np, sp, theory_peel, wilson):
     def reference_fault_count(code, rounds):
         """Pakhunov's count for a BB memory: n(wT + T/2 + 1), w = qubit degree."""
         w = int(np.asarray(code.hx.sum(axis=0)).max())
@@ -3096,16 +3753,45 @@ def _(build_memory_circuit, code_from_key, dem_to_matrices, dz, flag_detector_ma
                 strong_ler=wilson(int(res["strong"]["fail"].sum()), config.shots),
                 silent=int((res["weak"]["conv"] & res["weak"]["fail"]).sum()))
 
+        # Check 2 compares against a number the literature measured on ITS circuit,
+        # which extracts one check family. Ours extracts both, because the flags
+        # attach to the X-check ancillas -- so the comparison has to run on the
+        # reference circuit of section 5.1, not on the experiment circuit. Measured
+        # on the wrong one, [[288,12,18]] reads 9% against a 77.8% target; on the
+        # right one it reads 64.8%, and the residual is the peeling implementation.
+        ref_circ = build_reference_circuit(code, config.rounds, config.p)
+        rH, rL, rpr = dem_to_matrices(
+            ref_circ.detector_error_model(decompose_errors=False))
+        rdet, robs = ref_circ.compile_detector_sampler(seed=config.seed).sample(
+            config.shots, separate_observables=True)
+        _w = dz.parallel_workers(config.shots, config.workers)
+        rres, _ = dz.run_zoo(rH, rL, rpr, rdet, robs, [("weak", {"kind": "peel"})],
+                             workers=_w, chunk_size=dz.chunk_for(config.shots, _w),
+                             on_chunk=on_chunk)
+        ref_resolved = wilson(int(rres["weak"]["conv"].sum()), config.shots)
+        ref_deg = None
+        _Hb = (rH > 0).astype(np.int8)
+        _G = (_Hb.T @ _Hb).tocsr()
+        ref_deg = float((np.diff(_G.indptr) - 1).mean())
+        ref_predicted = theory_peel(rH.shape[1], float(rpr.sum()), ref_deg)
+
         # Check 1: how dense is our fault model compared with the reference formula?
         ref = reference_fault_count(code, config.rounds)
         out["v1"] = dict(reference_faults=ref, our_faults=arms[True]["faults"],
                          our_faults_unflagged=arms[False]["faults"],
-                         ratio=arms[False]["faults"] / ref)
-        # Check 2: do we reproduce the published figure?
-        rate, lo, hi = arms[True]["weak_resolved"]
+                         ratio=arms[False]["faults"] / ref,
+                         reference_circuit_faults=int(rH.shape[1]),
+                         reference_circuit_ratio=rH.shape[1] / ref)
+        # Check 2: do we reproduce the published figure, on the reference circuit?
+        rate, lo, hi = ref_resolved
         out["v2"] = dict(measured=rate, ci_low=lo, ci_high=hi, target=float(target),
                          agrees=bool(lo <= target <= hi),
-                         measured_unflagged=arms[False]["weak_resolved"][0])
+                         predicted=ref_predicted,
+                         model_agrees=bool(abs(ref_predicted - float(target)) < 0.02),
+                         decoder_gap=float(ref_predicted - rate),
+                         lam=float(rpr.sum()), mean_degree=ref_deg,
+                         on_experiment_circuit=arms[True]["weak_resolved"][0],
+                         on_experiment_circuit_unflagged=arms[False]["weak_resolved"][0])
         # Check 3: the cost of the flags (independent samples: different circuits)
         f, uf = arms[True]["strong_ler"], arms[False]["strong_ler"]
         if f[2] < uf[1]:
@@ -3178,17 +3864,29 @@ def _(
     mo.stop(exp1_data is None, mo.md("*Run Experiment 1, or load a saved run above.*"))
     _v1, _v2, _v3 = exp1_data["v1"], exp1_data["v2"], exp1_data["v3"]
     _source = exp1_data.get("source") or ui_exp1_source.value
+    # Files written before the reference-circuit fix measured check 2 on the
+    # experiment circuit, which extracts both check families, and carry no
+    # analytic prediction. Say so rather than reporting them as comparable.
+    _stale2 = (None if "predicted" in _v2 else
+               "saved before the reference-circuit fix (§5.1) — re-run this point "
+               "for a number comparable to the paper")
 
     _fig, (_a, _b) = plt.subplots(1, 2, figsize=(11, 4.2))
     _a.bar([0], [_v2["measured"]], color="#1f77b4", width=0.5)
     _a.errorbar([0], [_v2["measured"]],
                 yerr=[[_v2["measured"] - _v2["ci_low"]], [_v2["ci_high"] - _v2["measured"]]],
                 fmt="none", color="k", capsize=6)
+    if _stale2 is None:
+        _a.bar([1], [_v2["predicted"]], color="#9467bd", width=0.5)
+        _a.set_xticks([0, 1], ["our decoder\n(reference circuit)", "our DEM,\nanalytic model"])
+        _a.set_title("Check 2 — model reproduces the paper; the gap is our decoder")
+    else:
+        _a.set_xticks([0], ["our decoder\n(experiment circuit)"])
+        _a.set_xlim(-0.6, 0.6)
+        _a.set_title("Check 2 — stale run, not comparable to the paper")
     _a.axhline(_v2["target"], color="#d62728", ls="--", label=f"literature: {_v2['target']:.3f}")
-    _a.set_xticks([0], ["this notebook"])
     _a.set_ylim(0, 1)
     _a.set_ylabel("fraction of shots the weak decoder resolves")
-    _a.set_title(f"Check 2 — {'agrees with' if _v2['agrees'] else 'differs from'} the published value")
     _a.legend(fontsize=8)
     for _i, (_lab, _m) in enumerate([("with flags", _v3["ler_flagged"]),
                                      ("without flags", _v3["ler_unflagged"])]):
@@ -3207,10 +3905,23 @@ def _(
         dict(check="Check 1: fault-model density", value=f"{_v1['ratio']:.1f}×",
              detail=f"{_v1['our_faults_unflagged']:,} faults vs {_v1['reference_faults']:,} "
                     f"from n(wT + T/2 + 1)"),
-        dict(check="Check 2: reproduces literature",
-             value="yes" if _v2["agrees"] else "no",
-             detail=f"ours {_v2['measured']:.3f} [{_v2['ci_low']:.3f}, {_v2['ci_high']:.3f}] "
-                    f"vs {_v2['target']:.3f} ({_source})"),
+        dict(check="Check 2a: model reproduces literature",
+             value=("yes" if _v2.get("model_agrees") else "no") if _stale2 is None else "—",
+             detail=(_stale2 if _stale2 else
+                     (f"analytic prediction on our own DEM {_v2['predicted']:.3f} "
+                      f"vs {_v2['target']:.3f} ({_source}); "
+                      f"lambda {_v2['lam']:.2f}, mean degree {_v2['mean_degree']:.1f}"))),
+        dict(check="Check 2b: our decoder against that model",
+             value=(f"{_v2['decoder_gap']:+.3f}" if _stale2 is None else "—"),
+             detail=((f"measured {_v2['measured']:.3f} "
+                      f"[{_v2['ci_low']:.3f}, {_v2['ci_high']:.3f}] on the experiment circuit, "
+                      "which extracts both check families and so is not comparable to the paper")
+                     if _stale2 else
+                     (f"measured {_v2['measured']:.3f} "
+                      f"[{_v2['ci_low']:.3f}, {_v2['ci_high']:.3f}] on the REFERENCE circuit; "
+                      f"on the experiment circuit it reads "
+                      f"{_v2['on_experiment_circuit']:.3f}, which extracts "
+                      "both check families and so is not comparable to the paper"))),
         dict(check="Check 3: accuracy cost of flags", value=_v3["effect"],
              detail=f"LER {_v3['ler_flagged'][0]:.2e} with flags vs "
                     f"{_v3['ler_unflagged'][0]:.2e} without; "
@@ -3388,6 +4099,11 @@ def _(mo):
     help. Fitting `ln(ratio)` linearly in T and solving for `ratio = 1` gives the
     crossover T\*: the number of rounds beyond which flags stop paying.
 
+    **Measured result:** both ratios are flat in T over 6–24 — the blind arm sits
+    at 1.6–2.1 and the sighted arm at 0.45–0.50 on [[72,12,6]] — so no crossover
+    appears in that range and the fitted T\* is not meaningful here. Report the
+    ratios themselves rather than an extrapolated crossover.
+
     The error bars on a ratio of two failure counts use the standard Poisson
     approximation, `SE(ln r) ≈ sqrt(1/k₁ + 1/k₂)`, which needs a decent number of
     failures per point — check the counts before quoting T\*.
@@ -3463,7 +4179,7 @@ def _(
                      "point cost about the same and keeps the small-T error bars tight.*"),
                mo.md("*X-check detectors off is the corrected model: in a Z-basis memory they "
                      "can never help predict a Z-type observable, but they multiply the DEM by "
-                     "about 10x. Leave it off unless you are reproducing section 4 exactly.*")])
+                     "roughly an order of magnitude. Leave it off unless you are reproducing section 4 exactly.*")])
     return (ui_exp2_code, ui_exp2_osd, ui_exp2_p, ui_exp2_rounds, ui_exp2_scale,
             ui_exp2_seed, ui_exp2_shots, ui_exp2_workers, ui_exp2_xdet)
 
@@ -3814,8 +4530,12 @@ def _(mo):
 
     This experiment measures that curve directly. It decodes nothing, so it runs
     in seconds. A trigger that fires on nearly every shot escalates nearly every
-    shot, which is the mechanism behind a null result for the flag rules in
-    Experiments 4 and 6 -- and the argument for a *local* trigger instead.
+    shot, which is one of the two mechanisms behind the null result for the flag
+    rules in Experiments 4 and 6. A *local* trigger — one flag, one round —
+    would escape this saturation, but Experiment 6's headroom measurement closes
+    that door too: across four weak decoders and 250,000 shots, at most **8**
+    silent failures were repairable by the strong decoder (zero for three of the
+    four), so a more selective trigger has almost nothing left to select.
     """)
     return
 
@@ -4382,9 +5102,10 @@ def _(
                mo.md(f"Parallel backend on this machine: **{_backend}** · "
                      f"compiled peeling: **{dz.NUMBA_STATUS}**"
                      + ("" if dz.HAVE_NUMBA else
-                        "  \nWithout numba the peeling decoder runs ~100x slower (17 ms vs "
-                        "0.16 ms per shot), which makes every cost comparison involving `peel` "
-                        "meaningless. Install it with `uv add numba`, then reload this notebook."))])
+                        "  \nWithout numba the peeling decoder runs orders of magnitude slower "
+                        "than the 22 µs per shot measured with it, which makes every cost "
+                        "comparison involving `peel` meaningless. Install it with "
+                        "`uv add numba`, then reload this notebook."))])
     return (tests_exp6,)
 
 
@@ -4853,40 +5574,1497 @@ def _(
     return
 
 
+# =============================================================================
+# 11.7 Experiment 7 -- surface-code baseline
+# =============================================================================
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11.7 Experiment 7 — surface-code baseline
+
+    The reference point every QLDPC claim is measured against. P1 promised
+    surface codes at $d \in \{5, 7\}$; this is that run.
+
+    It uses the circuits of §5.2 — Stim's own rotated-memory generator, because
+    `build_memory_circuit` needs translation invariance and a surface code has
+    boundaries — and then the **same** `dem_to_matrices`, the same BP+OSD and the
+    same Wilson intervals as every other experiment. Only circuit construction
+    differs, which is what makes the comparison fair.
+
+    What to read from it: the logical error rate should fall with distance below
+    threshold and rise with it above, and the crossing gives a threshold estimate.
+
+    **Measured result:** the crossing sits at **1.07%**, against the ~1% value the
+    literature reports for the rotated surface code under circuit-level
+    depolarising noise. Since only circuit construction differs from the BB
+    experiments, that agreement licenses the rest of the notebook — it is
+    end-to-end evidence on a code family with no stake in the thesis. The estimate
+    comes from a genuine crossing between $p = 8{\times}10^{-3}$ and
+    $1.2{\times}10^{-2}$, not from extrapolation. Note that the $d = 5$ and
+    $d = 7$ points at $p \leq 10^{-3}$ record 0–3 failures in 20,000 shots:
+    `threshold_estimate` does not filter on power, so those points are too
+    underpowered to quote or plot as measurements even though they sit far below
+    the crossing and do not affect it.
+    """)
+    return
+
+
+@app.cell
+def _(dz, np, surface_code_problem, wilson):
+    def surface_sweep_point(distance, rounds, p, shots, seed, osd_order=0, workers=1,
+                            on_chunk=None):
+        """One (distance, p) point: build, sample, decode with BP+OSD, score."""
+        pr = surface_code_problem(distance, rounds, p)
+        det, obs = pr["circuit"].compile_detector_sampler(seed=seed).sample(
+            shots, separate_observables=True)
+        w = dz.parallel_workers(shots, workers)
+        res, _backend = dz.run_zoo(
+            pr["H"], pr["L"], pr["priors"], det.astype(np.uint8), obs.astype(np.uint8),
+            [("strong", {"kind": "osd", "osd_order": osd_order, "max_iter": 20})],
+            workers=w, chunk_size=dz.chunk_for(shots, w), on_chunk=on_chunk)
+        fails = int(res["strong"]["fail"].sum())
+        ler, lo, hi = wilson(fails, shots)
+        return dict(distance=distance, rounds=rounds, p=float(p), shots=int(shots),
+                    seed=int(seed), osd_order=int(osd_order),
+                    failures=fails, ler=ler, ci_low=lo, ci_high=hi,
+                    detectors=int(pr["H"].shape[0]), faults=int(pr["H"].shape[1]),
+                    qubits=int(pr["circuit"].num_qubits),
+                    time_p50_us=float(np.median(res["strong"]["time_us"])))
+
+    def threshold_estimate(points):
+        """
+        Crudest useful estimate: the p where the d = 5 and d = 7 curves cross.
+        Below it more distance helps, above it more distance hurts. Returns None
+        when the curves do not cross in the sampled range.
+        """
+        by_d = {}
+        for pt in points:
+            by_d.setdefault(pt["distance"], {})[pt["p"]] = pt["ler"]
+        if not {5, 7} <= set(by_d):
+            return None
+        ps = sorted(set(by_d[5]) & set(by_d[7]))
+        sign = [by_d[5][p] - by_d[7][p] for p in ps]
+        for a, b, pa, pb in zip(sign, sign[1:], ps, ps[1:]):
+            if a > 0 >= b or a < 0 <= b:          # d=7 overtakes d=5
+                t = abs(a) / (abs(a) + abs(b)) if (a or b) else 0.5
+                return float(pa + t * (pb - pa))
+        return None
+
+    return surface_sweep_point, threshold_estimate
+
+
+@app.cell
+def _(mo, os):
+    _cores = os.cpu_count() or 1
+    ui_exp7_d = mo.ui.multiselect(["3", "5", "7"], value=["3", "5", "7"], label="Distances")
+    ui_exp7_rounds = mo.ui.slider(1, 24, value=6, step=1, label="Rounds T")
+    ui_exp7_p = mo.ui.multiselect(
+        ["5e-4", "1e-3", "2e-3", "3e-3", "5e-3", "8e-3", "1.2e-2"],
+        value=["5e-4", "1e-3", "2e-3", "3e-3", "5e-3", "8e-3"], label="Noise levels p")
+    ui_exp7_shots = mo.ui.number(start=100, stop=500_000, step=100, value=20_000,
+                                 label="Shots per point")
+    ui_exp7_seed = mo.ui.number(value=20260929, label="Seed")
+    ui_exp7_osd = mo.ui.slider(0, 7, value=0, step=1, label="OSD order")
+    ui_exp7_workers = mo.ui.slider(1, max(2, _cores), value=min(12, max(1, _cores - 4)),
+                                   label=f"CPU workers (of {_cores})")
+    mo.vstack([mo.md("### Experiment 7 — configuration"),
+               mo.hstack([ui_exp7_rounds, ui_exp7_shots, ui_exp7_osd]),
+               ui_exp7_d, ui_exp7_p,
+               mo.hstack([ui_exp7_seed, ui_exp7_workers]),
+               mo.md("*Surface-code DEMs are far smaller than BB ones, so this is the "
+                     "cheapest experiment here: d = 7 at T = 6 has 288 detectors against "
+                     "the Gross code's 936. Include at least one p above 1% or the "
+                     "curves never cross and no threshold can be read.*")])
+    return (ui_exp7_d, ui_exp7_osd, ui_exp7_p, ui_exp7_rounds, ui_exp7_seed,
+            ui_exp7_shots, ui_exp7_workers)
+
+
+@app.cell
+def _(ui_exp7_d, ui_exp7_osd, ui_exp7_p, ui_exp7_rounds, ui_exp7_seed, ui_exp7_shots,
+      ui_exp7_workers):
+    exp7_config = dict(distances=sorted(int(d) for d in ui_exp7_d.value),
+                       rounds=int(ui_exp7_rounds.value),
+                       ps=sorted(float(p) for p in ui_exp7_p.value),
+                       shots=int(ui_exp7_shots.value), seed=int(ui_exp7_seed.value),
+                       osd_order=int(ui_exp7_osd.value),
+                       workers=int(ui_exp7_workers.value))
+    return (exp7_config,)
+
+
+@app.cell
+def _(mo):
+    run_exp7 = mo.ui.run_button(label="Run Experiment 7 — surface-code baseline")
+    run_exp7
+    return (run_exp7,)
+
+
+@app.cell
+def _(RESULTS_DIR, core_ready, exp7_config, mo, os, run_exp7, surface_sweep_point,
+      write_result_file):
+    exp7_run = None
+    if not core_ready:
+        _out = mo.md("*Locked: the tests above must pass first.*")
+    elif not run_exp7.value:
+        _out = mo.md("*Press **Run Experiment 7**, or load a saved run below.*")
+    else:
+        _stem = (f"EXP7_surface_T{exp7_config['rounds']}_{exp7_config['shots']}shots_"
+                 f"seed{exp7_config['seed']}_osd{exp7_config['osd_order']}")
+        _path = os.path.join(RESULTS_DIR, _stem + ".json")
+        _points = []
+        _total = len(exp7_config["distances"]) * len(exp7_config["ps"])
+        with mo.status.progress_bar(total=_total, title="surface sweep",
+                                    show_eta=True) as _bar:
+            for _d in exp7_config["distances"]:
+                for _p in exp7_config["ps"]:
+                    _points.append(surface_sweep_point(
+                        _d, exp7_config["rounds"], _p, exp7_config["shots"],
+                        exp7_config["seed"], osd_order=exp7_config["osd_order"],
+                        workers=exp7_config["workers"]))
+                    # written after every point, as Experiment 2 does
+                    write_result_file(_path, {"kind": "exp7", "config": exp7_config,
+                                              "points": _points})
+                    _bar.update(1)
+        exp7_run = dict(config=exp7_config, points=_points, path=_path)
+        _out = mo.md(f"Sweep finished. Saved to `{_path}`.")
+    _out
+    return (exp7_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, exp7_run, glob, mo, os, read_result_file):
+    _ = exp7_run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "EXP7_*.json")))
+    ui_exp7_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+                                  value=os.path.basename(_files[-1]) if _files else None,
+                                  label="Saved Experiment 7 run")
+    load_exp7_btn = mo.ui.run_button(label="Load Experiment 7")
+    mo.hstack([ui_exp7_file, load_exp7_btn]) if _files else mo.md(
+        "*No saved Experiment 7 runs yet.*")
+    return load_exp7_btn, read_result_file, ui_exp7_file
+
+
+@app.cell
+def _(load_exp7_btn, read_result_file, ui_exp7_file):
+    exp7_loaded = None
+    if load_exp7_btn.value and ui_exp7_file.value:
+        _d = read_result_file(ui_exp7_file.value, "exp7")
+        exp7_loaded = dict(config=_d["config"], points=_d["points"],
+                           path=ui_exp7_file.value)
+    return (exp7_loaded,)
+
+
+@app.cell
+def _(np, plt):
+    def plot_surface_sweep(points):
+        """Logical error rate against p, one line per distance, log-log."""
+        by_d = {}
+        for pt in points:
+            by_d.setdefault(pt["distance"], []).append(pt)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for i, d in enumerate(sorted(by_d)):
+            rows = sorted(by_d[d], key=lambda r: r["p"])
+            ps = [r["p"] for r in rows]
+            ler = [max(r["ler"], r["ci_high"] if r["failures"] == 0 else r["ler"])
+                   for r in rows]
+            lo = [max(r["ler"] - r["ci_low"], 0) for r in rows]
+            hi = [max(r["ci_high"] - r["ler"], 0) for r in rows]
+            ax.errorbar(ps, ler, yerr=[lo, hi], marker="os^Dv"[i % 5], capsize=3,
+                        label=f"d = {d}")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel("physical error rate $p$")
+        ax.set_ylabel("logical error rate")
+        ax.set_title("Surface-code baseline: below threshold, more distance helps")
+        ax.grid(True, which="both", alpha=0.3)
+        ax.legend()
+        fig.tight_layout()
+        return fig
+
+    return (plot_surface_sweep,)
+
+
+@app.cell
+def _(exp7_loaded, exp7_run, export_bundle, mo, os, plot_surface_sweep, RESULTS_DIR,
+      threshold_estimate, write_result_file):
+    exp7_data = exp7_run if exp7_run is not None else exp7_loaded
+    mo.stop(exp7_data is None, mo.md("*Run Experiment 7, or load a saved run above.*"))
+
+    _pts = exp7_data["points"]
+    _cfg = exp7_data["config"]
+    _fig = plot_surface_sweep(_pts)
+    _thr = threshold_estimate(_pts)
+    _rows = ["| d | p | shots | failures | LER | 95% CI | qubits | detectors |",
+             "|--:|--:|--:|--:|--:|:--|--:|--:|"]
+    for _pt in sorted(_pts, key=lambda r: (r["distance"], r["p"])):
+        _rows.append(
+            f"| {_pt['distance']} | {_pt['p']:g} | {_pt['shots']} | {_pt['failures']} | "
+            f"{_pt['ler']:.2e} | [{_pt['ci_low']:.1e}, {_pt['ci_high']:.1e}] | "
+            f"{_pt['qubits']} | {_pt['detectors']} |")
+    _head = (f"**Threshold estimate (d = 5 vs d = 7 crossing): "
+             f"{_thr:.2e}**" if _thr else
+             "*The d = 5 and d = 7 curves do not cross in this range — add a larger p.*")
+    _path = os.path.join(
+        RESULTS_DIR, f"EXP7_surface_T{_cfg['rounds']}_{_cfg['shots']}shots_"
+                     f"seed{_cfg['seed']}_osd{_cfg['osd_order']}.json")
+    write_result_file(_path, {"kind": "exp7", "config": _cfg, "points": _pts,
+                              "threshold": _thr})
+    _folder = export_bundle(
+        _path, f"Experiment 7 surface-code baseline — T={_cfg['rounds']}, "
+               f"{_cfg['shots']} shots/point",
+        {"surface_sweep": _fig}, {"points": _pts},
+        notes=f"Threshold estimate: {_thr:.3e}" if _thr else "No crossing in range.")
+    mo.vstack([mo.md("### Experiment 7 — results"), mo.md(_head),
+               mo.md("\n".join(_rows)), _fig,
+               mo.md(f"**Exported** to `{_folder}`")])
+    return (exp7_data,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11.8 Experiment 8 — the accuracy/latency frontier
+
+    Experiment 2 established that reading the flag detectors lowers the logical
+    error rate. It did not ask the obvious follow-up: **is that the cheapest way
+    to buy the same accuracy?** Flag qubits are not the only knob. Raising the
+    OSD order costs nothing in hardware and also lowers the error rate, so the
+    honest question is not "do flags help?" but "do flags help *per unit of
+    decode time*?"
+
+    This experiment answers it by sweeping both knobs together — four arms
+    crossed with a range of OSD orders — and plotting logical error rate against
+    median decode time. A point is **dominated** when some other point is both
+    more accurate and faster; the points that survive form the Pareto frontier,
+    and the verdict is which way of spending the budget lands on it.
+
+    The four arms are §11.2's three plus §11.9's: `unflagged`, `blind`,
+    `sighted` (flag rows added to $H$) and `updated` (the exact flag posterior
+    applied to the priors, on the blind-sized matrix). Including `updated` here
+    is the only way to compare it against the others honestly, for the reason
+    below.
+
+    /// admonition | One sweep, one timing regime.
+    Per-shot decode time depends on how many worker processes compete for cores:
+    the *identical* blind arm reads 7,246 µs at 12 workers and 4,246 µs at one.
+    A frontier built from points measured at different worker counts would be an
+    artefact of the harness, not a result. The `updated` arm re-derives its priors
+    every shot and so cannot be parallelised at all, which pins the whole sweep to
+    one worker whenever it is selected. Every point records the worker count it
+    was measured at, and `pareto_frontier` refuses to rank points across regimes.
+    ///
+
+    **Why the cost is real.** Reading the flags makes the decoding problem
+    larger, not just the circuit: on [[72,12,6]] at $T = 12$ the check matrix goes
+    from 468 × 4,392 to 900 × 5,688, which is 2.5× the entries. Part of that is
+    bought back — the flag detectors help BP converge, so the sighted arm needs
+    fewer iterations than the blind arm on the same circuit — but only part.
+
+    **How to read the result.** If a flagged point lands on the frontier, flags
+    are worth their decode time at that operating point and Result R1 stands as a
+    recommendation. If the frontier is entirely unflagged, the R1 gain is real but
+    dominated, and the claim must narrow to *at fixed decoder strength* — still a
+    finding, and a more careful one.
+    """)
+    return
+
+
+@app.cell
+def _(build_memory_circuit, dem_to_matrices, dz, flag_detector_mask,
+      flag_groups, flag_posteriors, np, shot_priors, time, wilson):
+    PARETO_ARMS = ("unflagged", "blind", "updated", "sighted")
+
+    def pareto_point(code, rounds, p, shots, seed, arm, osd_order, workers=1,
+                     max_iter=20, x_detectors=False, on_chunk=None):
+        """
+        One (arm, osd_order) point: accuracy and decode cost together.
+
+        The arms: `unflagged` has no flag qubits; `blind` has them but the flag
+        detector rows are removed from H; `updated` decodes that same blind matrix
+        with the per-shot flag posterior of §11.9; `sighted` keeps the flag rows.
+        The three flagged arms share one circuit and one set of shots, so they are
+        paired with each other; `unflagged` is a different circuit and is not.
+
+        TIMING REGIME. `time_p50_us` is per-shot CPU time, and it depends on how
+        many worker processes are competing for cores: the identical blind arm
+        reads 7,246 us at 12 workers and 4,246 us at one. `updated` changes the
+        priors every shot, so it cannot use `dz.run_zoo`'s pool at all and always
+        runs single-process. Every point therefore records the worker count it was
+        measured at, and `pareto_frontier` refuses to rank points from different
+        regimes -- comparing across them would be meaningless.
+        """
+        if arm not in PARETO_ARMS:
+            raise ValueError(f"arm must be one of {PARETO_ARMS}")
+        if arm == "updated" and workers != 1:
+            raise ValueError(
+                "the 'updated' arm re-derives priors every shot, so it cannot be "
+                "parallelised; run the whole sweep at workers=1 so every arm is "
+                "measured in the same timing regime")
+        flags = arm != "unflagged"
+        circ = build_memory_circuit(code, rounds, p, use_flags=flags,
+                                    x_detectors=x_detectors)
+        H, L, priors = dem_to_matrices(
+            circ.detector_error_model(decompose_errors=False))
+        det, obs = circ.compile_detector_sampler(seed=seed).sample(
+            shots, separate_observables=True)
+        det, obs = det.astype(np.uint8), obs.astype(np.uint8)
+        flag_bits = groups = None
+        if arm in ("blind", "updated"):
+            mask = flag_detector_mask(code, rounds, True, circ.num_detectors,
+                                      x_detectors=x_detectors)
+            flag_bits = det[:, mask]
+            # column indices are unchanged by slicing rows, so the groups taken
+            # from the full H stay valid against the blind matrix
+            groups = flag_groups(H, mask)
+            H, det = H[~mask], det[:, ~mask]
+
+        spec = {"kind": "osd", "osd_order": osd_order, "max_iter": max_iter}
+        if arm == "updated":
+            idx, disjoint, info = groups
+            if not disjoint:
+                raise ValueError(f"flag groups overlap on this code: {info}")
+            lo_p, hi_p, owner = flag_posteriors(priors, idx)
+            dec = dz.make_decoder(dict(spec), H, priors)
+            fail = np.zeros(shots, dtype=bool)
+            t_us = np.zeros(shots, dtype=np.float64)
+            iters = np.zeros(shots, dtype=np.float64)
+            for i in range(shots):
+                dec.dec.update_channel_probs(
+                    shot_priors(lo_p, hi_p, owner, flag_bits[i]).tolist())
+                t0 = time.perf_counter()
+                e, _c, work = dec.decode(det[i])
+                t_us[i] = (time.perf_counter() - t0) * 1e6
+                iters[i] = work
+                fail[i] = bool(np.any((L @ e) % 2 != obs[i]))
+                if on_chunk is not None and (i + 1) % 500 == 0:
+                    on_chunk(500)
+        else:
+            w = dz.parallel_workers(shots, workers)
+            res, _backend = dz.run_zoo(
+                H, L, priors, det, obs, [("strong", spec)],
+                workers=w, chunk_size=dz.chunk_for(shots, w), on_chunk=on_chunk)
+            r = res["strong"]
+            fail, t_us, iters = r["fail"], r["time_us"], r["work"]
+
+        fails = int(np.sum(fail))
+        ler, lo, hi = wilson(fails, shots)
+        return dict(arm=arm, osd_order=int(osd_order), code=code.name,
+                    rounds=int(rounds), p=float(p), shots=int(shots), seed=int(seed),
+                    workers=1 if arm == "updated" else int(workers),
+                    failures=fails, ler=ler, ci_low=lo, ci_high=hi,
+                    time_p50_us=float(np.median(t_us)),
+                    time_p99_us=float(np.percentile(t_us, 99)),
+                    bp_iters=float(np.mean(iters)),
+                    detectors=int(H.shape[0]), faults=int(H.shape[1]),
+                    qubits=int(circ.num_qubits))
+
+    def timing_regimes(points):
+        """The distinct worker counts a set of points was measured at."""
+        return sorted({int(r.get("workers", 1)) for r in points})
+
+    def pareto_frontier(points, cost="time_p50_us", value="ler", strict=True):
+        """
+        The non-dominated points, cheapest first.
+
+        A point is dominated when another is no worse on both axes and strictly
+        better on one. Ties on both axes keep the first point seen, so the
+        frontier never holds two points at the same coordinates.
+
+        `strict` refuses to rank points measured at different worker counts,
+        because per-shot time is not comparable across them. Pass strict=False
+        only to inspect a mixed set, never to make a claim from one.
+        """
+        if strict and len(timing_regimes(points)) > 1:
+            raise ValueError(
+                "these points were measured at different worker counts "
+                f"{timing_regimes(points)}, so their decode times cannot be "
+                "ranked against each other; re-run the sweep in one regime")
+        out = []
+        for a in sorted(points, key=lambda r: (r[cost], r[value])):
+            if any(b[cost] <= a[cost] and b[value] <= a[value]
+                   and (b[cost] < a[cost] or b[value] < a[value]) for b in points):
+                continue
+            if not any(b[cost] == a[cost] and b[value] == a[value] for b in out):
+                out.append(a)
+        return out
+
+    def frontier_verdict(points):
+        """Whether flags earn their decode time, and the cheapest way to each LER."""
+        regimes = timing_regimes(points)
+        if len(regimes) > 1:
+            return dict(frontier=[], flagged_on_frontier=[], flags_pay=False,
+                        best_ler_arm=None, regimes=regimes, comparable=False,
+                        verdict=f"not comparable: points span worker counts {regimes}")
+        front = pareto_frontier(points)
+        flagged = [r for r in front if r["arm"] != "unflagged"]
+        best = min(points, key=lambda r: r["ler"]) if points else None
+        names = [f"{r['arm']}/OSD-{r['osd_order']}" for r in flagged]
+        if any(r["arm"] == "updated" for r in front) and len(front) == 1:
+            verdict = "prior updating dominates every other point"
+        elif flagged:
+            verdict = "flags are on the frontier"
+        else:
+            verdict = "the frontier is entirely unflagged"
+        return dict(frontier=front, flagged_on_frontier=names,
+                    flags_pay=bool(flagged), regimes=regimes, comparable=True,
+                    best_ler_arm=best["arm"] if best else None, verdict=verdict)
+    return (PARETO_ARMS, frontier_verdict, pareto_frontier, pareto_point,
+            timing_regimes)
+
+
+@app.cell
+def _(BB_PRESETS, GB_PRESETS, PARETO_ARMS, mo, os):
+    _cores = os.cpu_count() or 1
+    ui_exp8_code = mo.ui.dropdown(list(BB_PRESETS) + list(GB_PRESETS),
+                              value="[[72, 12, 6]]", label="Code")
+    ui_exp8_rounds = mo.ui.slider(1, 24, value=12, step=1, label="Rounds T")
+    ui_exp8_p = mo.ui.dropdown(["5e-4", "1e-3", "2e-3", "3e-3"], value="1e-3",
+                               label="Physical error rate p")
+    ui_exp8_shots = mo.ui.number(start=500, stop=200_000, step=500, value=20_000,
+                                 label="Shots per point")
+    ui_exp8_seed = mo.ui.number(value=20260930, label="Seed")
+    ui_exp8_arms = mo.ui.multiselect(list(PARETO_ARMS), value=list(PARETO_ARMS),
+                                     label="Arms")
+    ui_exp8_osd = mo.ui.multiselect(["0", "2", "4", "7"], value=["0", "2", "4"],
+                                    label="OSD orders")
+    ui_exp8_workers = mo.ui.slider(1, max(2, _cores), value=min(12, max(1, _cores - 4)),
+                                   label=f"CPU workers (of {_cores})")
+    mo.vstack([mo.md("### Experiment 8 — configuration"),
+               mo.hstack([ui_exp8_code, ui_exp8_rounds, ui_exp8_p]),
+               mo.hstack([ui_exp8_shots, ui_exp8_seed, ui_exp8_workers]),
+               ui_exp8_arms, ui_exp8_osd,
+               mo.md("*Cost grows as arms x OSD orders, and high OSD orders are "
+                     "slow: OSD-4 on the blind arm is the most expensive point "
+                     "here. The frontier is about ordering points, not about "
+                     "resolving each LER to three digits.*  \n"
+                     "*Selecting **updated** forces the whole sweep to one worker: "
+                     "that arm re-derives priors every shot and cannot be "
+                     "parallelised, and per-shot times measured at different "
+                     "worker counts are not comparable. Expect it to be slow — "
+                     "drop the blind arm at OSD >= 2 if you are short of time, "
+                     "since it is never on the frontier.*")])
+    return (ui_exp8_arms, ui_exp8_code, ui_exp8_osd, ui_exp8_p, ui_exp8_rounds,
+            ui_exp8_seed, ui_exp8_shots, ui_exp8_workers)
+
+
+@app.cell
+def _(ui_exp8_arms, ui_exp8_code, ui_exp8_osd, ui_exp8_p, ui_exp8_rounds,
+      ui_exp8_seed, ui_exp8_shots, ui_exp8_workers):
+    # One timing regime for the whole sweep: `updated` cannot be parallelised,
+    # so selecting it pins every arm to a single worker.
+    _arms8 = list(ui_exp8_arms.value)
+    exp8_config = dict(code=ui_exp8_code.value, rounds=int(ui_exp8_rounds.value),
+                       p=float(ui_exp8_p.value), shots=int(ui_exp8_shots.value),
+                       seed=int(ui_exp8_seed.value),
+                       arms=_arms8,
+                       osd_orders=sorted(int(o) for o in ui_exp8_osd.value),
+                       workers=1 if "updated" in _arms8 else int(ui_exp8_workers.value))
+    return (exp8_config,)
+
+
+@app.cell
+def _(mo):
+    run_exp8 = mo.ui.run_button(label="Run Experiment 8 — accuracy/latency frontier")
+    run_exp8
+    return (run_exp8,)
+
+
+@app.cell
+def _(RESULTS_DIR, code_from_key, core_ready, exp8_config, mo, os, pareto_point,
+      run_exp8, write_result_file):
+    exp8_run = None
+    if not core_ready:
+        _out = mo.md("*Locked: the tests above must pass first.*")
+    elif not run_exp8.value:
+        _out = mo.md("*Press **Run Experiment 8**, or load a saved run below.*")
+    elif not exp8_config["arms"] or not exp8_config["osd_orders"]:
+        _out = mo.md("*Pick at least one arm and one OSD order.*")
+    else:
+        _c = code_from_key(exp8_config["code"])
+        _tag = exp8_config["code"].strip("[]").replace(", ", "-")
+        _path = os.path.join(
+            RESULTS_DIR,
+            f"EXP8_{_tag}_T{exp8_config['rounds']}_p{exp8_config['p']:g}_"
+            f"{exp8_config['shots']}shots_seed{exp8_config['seed']}.json")
+        _points = []
+        _total = len(exp8_config["arms"]) * len(exp8_config["osd_orders"])
+        with mo.status.progress_bar(total=_total, title="accuracy/latency frontier",
+                                    show_eta=True) as _bar:
+            for _arm in exp8_config["arms"]:
+                for _o in exp8_config["osd_orders"]:
+                    _bar.update(subtitle=f"{_arm} · OSD-{_o}")
+                    _points.append(pareto_point(
+                        _c, exp8_config["rounds"], exp8_config["p"],
+                        exp8_config["shots"], exp8_config["seed"], _arm, _o,
+                        workers=exp8_config["workers"]))
+                    # written after every point, as Experiments 2 and 7 do
+                    write_result_file(_path, {"kind": "exp8", "config": exp8_config,
+                                              "points": _points})
+        exp8_run = dict(config=exp8_config, points=_points, path=_path)
+        _out = mo.md(f"Sweep finished. Saved to `{_path}`.")
+    _out
+    return (exp8_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, exp8_run, glob, mo, os):
+    _ = exp8_run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "EXP8_*.json")))
+    ui_exp8_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+                                  value=os.path.basename(_files[-1]) if _files else None,
+                                  label="Saved Experiment 8 run")
+    load_exp8_btn = mo.ui.run_button(label="Load Experiment 8")
+    mo.hstack([ui_exp8_file, load_exp8_btn]) if _files else mo.md(
+        "*No saved Experiment 8 runs yet.*")
+    return load_exp8_btn, ui_exp8_file
+
+
+@app.cell
+def _(load_exp8_btn, read_result_file, ui_exp8_file):
+    exp8_loaded = None
+    if load_exp8_btn.value and ui_exp8_file.value:
+        _d = read_result_file(ui_exp8_file.value, "exp8")
+        exp8_loaded = dict(config=_d["config"], points=_d["points"],
+                           path=ui_exp8_file.value)
+    return (exp8_loaded,)
+
+
+@app.cell
+def _(np, pareto_frontier, plt):
+    def plot_pareto(points):
+        """Logical error rate against median decode time, with the frontier drawn."""
+        style = {"unflagged": ("#555555", "s", "no flag qubits"),
+                 "blind": ("#c2c2c2", "^", "flags built, decoder blind"),
+                 "sighted": ("#8c8c8c", "o", "flag rows added to H"),
+                 "updated": ("#1f6fb4", "D", "flag posterior on the priors")}
+        fig, ax = plt.subplots(figsize=(8.4, 5.4))
+        front = pareto_frontier(points, strict=False)
+        if len(front) > 1:
+            ax.plot([r["time_p50_us"] for r in front],
+                    [r["ler"] if r["failures"] > 0 else r["ci_high"] for r in front],
+                    "-", color="#d62728", lw=1.6, alpha=0.8, zorder=1,
+                    label="Pareto frontier")
+        elif len(front) == 1:
+            ax.axvline(front[0]["time_p50_us"], color="#d62728", ls="--", lw=1.2,
+                       alpha=0.6, zorder=1, label="frontier (a single point)")
+        for arm, (col, mk, lab) in style.items():
+            rows = sorted([r for r in points if r["arm"] == arm],
+                          key=lambda r: r["time_p50_us"])
+            if not rows:
+                continue
+            # A point with zero failures has no logical error rate to plot on a
+            # log axis, so it is drawn at its 95% upper bound as a downward
+            # marker -- the usual convention for a bound rather than a estimate.
+            meas = [r for r in rows if r["failures"] > 0]
+            zero = [r for r in rows if r["failures"] == 0]
+            if meas:
+                ax.errorbar([r["time_p50_us"] for r in meas],
+                            [r["ler"] for r in meas],
+                            yerr=[[r["ler"] - r["ci_low"] for r in meas],
+                                  [r["ci_high"] - r["ler"] for r in meas]],
+                            fmt=mk, color=col, ms=8, capsize=3, ls=":", lw=1,
+                            label=lab, zorder=3)
+            if zero:
+                ax.plot([r["time_p50_us"] for r in zero],
+                        [r["ci_high"] for r in zero], "v", color=col, ms=9,
+                        mfc="none", mew=1.8, ls=":", lw=1, zorder=3,
+                        label=None if meas else lab)
+                seen = set()
+                for r in zero:                  # one label per visual cluster
+                    key = (round(np.log10(max(r["time_p50_us"], 1e-9)), 1),
+                           round(np.log10(max(r["ci_high"], 1e-12)), 2))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    ax.annotate("0 failures\n(95% bound)",
+                                (r["time_p50_us"], r["ci_high"]), fontsize=7.5,
+                                color=col, textcoords="offset points",
+                                xytext=(9, -20))
+            # OSD orders that land within a label's width of each other share
+            # one label, so "OSD-2" and "OSD-4" cannot overprint into "OSD-24".
+            # Clustering is in log space because both axes are logarithmic.
+            def _y(r):
+                return r["ler"] if r["failures"] > 0 else r["ci_high"]
+
+            groups = {}
+            for r in rows:
+                key = (round(np.log10(max(r["time_p50_us"], 1e-9)), 1),
+                       round(np.log10(max(_y(r), 1e-12)), 2))
+                groups.setdefault(key, []).append(r)
+            for members in groups.values():
+                ax.annotate(
+                    "OSD-" + ",".join(str(x) for x in
+                                      sorted(m["osd_order"] for m in members)),
+                    (max(m["time_p50_us"] for m in members),
+                     max(_y(m) for m in members)),
+                    fontsize=8, color=col, textcoords="offset points", xytext=(8, 5))
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel("median decode time per shot (µs)")
+        ax.set_ylabel("logical error rate per shot")
+        ax.set_title("Down and to the left is better — which way of using the flags wins?")
+        ax.grid(True, which="both", alpha=0.25)
+        ax.legend(fontsize=9, frameon=False)
+        fig.tight_layout()
+        return fig
+    return (plot_pareto,)
+
+
+@app.cell
+def _(RESULTS_DIR, exp8_loaded, exp8_run, export_bundle, frontier_verdict, mo, os,
+      plot_pareto, write_result_file):
+    exp8_data = exp8_run if exp8_run is not None else exp8_loaded
+    mo.stop(exp8_data is None, mo.md("*Run Experiment 8, or load a saved run above.*"))
+
+    _pts, _cfg = exp8_data["points"], exp8_data["config"]
+    _v = frontier_verdict(_pts)
+    _fig = plot_pareto(_pts)
+    _on = {(r["arm"], r["osd_order"]) for r in _v["frontier"]}
+    _base = min((r for r in _pts if r["arm"] == "unflagged"),
+                key=lambda r: r["ler"], default=None)
+
+    _rows = ["| arm | OSD | LER | 95% CI | median µs | p99 µs | BP iters | "
+             "detectors × faults | workers | frontier |",
+             "|:--|--:|--:|:--|--:|--:|--:|--:|--:|:--:|"]
+    for _r in sorted(_pts, key=lambda r: (r["arm"], r["osd_order"])):
+        _rows.append(
+            f"| {_r['arm']} | {_r['osd_order']} | {_r['ler']:.2e} | "
+            f"[{_r['ci_low']:.1e}, {_r['ci_high']:.1e}] | {_r['time_p50_us']:,.0f} | "
+            f"{_r['time_p99_us']:,.0f} | {_r['bp_iters']:.1f} | "
+            f"{_r['detectors']} × {_r['faults']} | {_r.get('workers', 1)} | "
+            f"{'**yes**' if (_r['arm'], _r['osd_order']) in _on else '—'} |")
+
+    _thin = [r for r in _pts if r["failures"] < 10]
+    _upd = [r for r in _v["frontier"] if r["arm"] == "updated"]
+    if not _v.get("comparable", True):
+        _head = (f"**Not comparable.** These points span worker counts "
+                 f"{_v['regimes']}, and per-shot decode time is not comparable "
+                 "across them — the identical blind arm reads 7,246 µs at 12 "
+                 "workers and 4,246 µs at one. Re-run the sweep in a single "
+                 "regime before reading any frontier from it.")
+    elif _upd and len(_v["frontier"]) == 1:
+        _r0 = _upd[0]
+        _head = (f"**Prior updating dominates every other point.** "
+                 f"`updated/OSD-{_r0['osd_order']}` is alone on the frontier at "
+                 f"{_r0['ler']:.2e} in {_r0['time_p50_us']:,.0f} µs: nothing else "
+                 "measured here is either more accurate or faster. The flag "
+                 "information is worth having, and adding flag rows to $H$ is the "
+                 "wrong way to take it.")
+    elif _v["flags_pay"]:
+        _head = (f"**Flags earn their decode time.** On the frontier: "
+                 + ", ".join(f"`{n}`" for n in _v["flagged_on_frontier"])
+                 + ". At those operating points no unflagged configuration is both "
+                   "more accurate and faster, so R1 stands as a recommendation.")
+    else:
+        _head = ("**The frontier is entirely unflagged.** Every flagged point is "
+                 "beaten on both axes by an unflagged one — raising the OSD order "
+                 "buys the same accuracy more cheaply than adding flag qubits. "
+                 "R1's gain is real *at fixed decoder strength*, and that is how "
+                 "it must be stated; it is not a recommendation to build flags.")
+    if _base is not None:
+        _head += (f"  \nCheapest unflagged point reaching its best accuracy: "
+                  f"OSD-{_base['osd_order']} at {_base['ler']:.2e} in "
+                  f"{_base['time_p50_us']:,.0f} µs.")
+    if _thin:
+        _head += (f"  \n\n> **Provisional — {len(_thin)} of {len(_pts)} points have "
+                  f"fewer than 10 failures** "
+                  + ", ".join(f"`{r['arm']}/OSD-{r['osd_order']}` ({r['failures']})"
+                              for r in _thin)
+                  + ". The frontier is decided by which point is lower, so a point "
+                    "resting on a handful of failures can move it. Raise the shot "
+                    "count until every point on the frontier has ~50 failures before "
+                    "quoting this verdict.")
+
+    _path = os.path.join(
+        RESULTS_DIR,
+        f"EXP8_{_cfg['code'].strip('[]').replace(', ', '-')}_T{_cfg['rounds']}_"
+        f"p{_cfg['p']:g}_{_cfg['shots']}shots_seed{_cfg['seed']}.json")
+    write_result_file(_path, {"kind": "exp8", "config": _cfg, "points": _pts,
+                              "frontier": [(r["arm"], r["osd_order"])
+                                           for r in _v["frontier"]],
+                              "flags_pay": _v["flags_pay"],
+                              "timing_regimes": _v.get("regimes", []),
+                              "underpowered": [(r["arm"], r["osd_order"], r["failures"])
+                                               for r in _thin]})
+    _folder = export_bundle(
+        _path, f"Experiment 8 accuracy/latency frontier — {_cfg['code']}, "
+               f"T={_cfg['rounds']}, p={_cfg['p']:g}",
+        {"pareto": _fig}, {"points": _pts}, notes=_v["verdict"])
+    mo.vstack([mo.md("### Experiment 8 — results"), mo.md(_head),
+               mo.md("\n".join(_rows)), _fig,
+               mo.md(f"Saved to `{_path}` · exported to `{_folder}`")])
+    return (exp8_data,)
+
+
+@app.cell
+def _(PARETO_ARMS, code_from_key, frontier_verdict, pareto_frontier,
+      pareto_point, render_checks, run_checks, timing_regimes):
+    def _pt(arm, osd, ler, t, workers=1):
+        return dict(arm=arm, osd_order=osd, ler=ler, time_p50_us=t, workers=workers)
+
+    def _frontier_drops_dominated():
+        pts = [_pt("unflagged", 0, 1e-2, 100), _pt("unflagged", 4, 1e-3, 200),
+               _pt("sighted", 0, 5e-3, 1000)]          # worse on both axes
+        f = pareto_frontier(pts)
+        assert {(r["arm"], r["osd_order"]) for r in f} == {("unflagged", 0),
+                                                           ("unflagged", 4)}, f
+
+    def _frontier_keeps_a_genuine_tradeoff():
+        pts = [_pt("unflagged", 0, 1e-2, 100), _pt("sighted", 0, 1e-3, 500)]
+        assert len(pareto_frontier(pts)) == 2      # cheaper vs more accurate
+
+    def _frontier_is_monotone():
+        pts = [_pt("a", 0, 1e-2, 100), _pt("b", 0, 1e-3, 200), _pt("c", 0, 5e-3, 150),
+               _pt("d", 0, 2e-2, 90)]
+        f = pareto_frontier(pts)
+        assert [r["time_p50_us"] for r in f] == sorted(r["time_p50_us"] for r in f)
+        lers = [r["ler"] for r in f]
+        assert all(x > y for x, y in zip(lers, lers[1:])), lers
+
+    def _frontier_collapses_exact_ties():
+        pts = [_pt("unflagged", 0, 1e-3, 100), _pt("sighted", 0, 1e-3, 100)]
+        assert len(pareto_frontier(pts)) == 1
+
+    def _verdict_reads_the_frontier():
+        dominated = [_pt("unflagged", 0, 1e-3, 100), _pt("sighted", 0, 5e-3, 900)]
+        assert not frontier_verdict(dominated)["flags_pay"]
+        assert frontier_verdict(dominated)["frontier"][0]["arm"] == "unflagged"
+        paying = [_pt("unflagged", 0, 1e-2, 100), _pt("sighted", 0, 1e-4, 300)]
+        v = frontier_verdict(paying)
+        assert v["flags_pay"] and v["flagged_on_frontier"] == ["sighted/OSD-0"], v
+
+    def _empty_input_is_safe():
+        assert pareto_frontier([]) == []
+        assert frontier_verdict([])["flags_pay"] is False
+
+    def _mixed_timing_regimes_are_refused():
+        # the identical blind arm reads 7,246 us at 12 workers and 4,246 us at
+        # one, so ranking across regimes would invent a result
+        pts = [_pt("unflagged", 2, 3.8e-3, 1606, workers=12),
+               _pt("updated", 0, 1.0e-4, 812, workers=1)]
+        assert timing_regimes(pts) == [1, 12]
+        try:
+            pareto_frontier(pts)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("mixed worker counts were ranked anyway")
+        v = frontier_verdict(pts)
+        assert v["comparable"] is False and v["frontier"] == [], v
+        assert pareto_frontier(pts, strict=False), "strict=False should still rank"
+
+    def _one_regime_is_comparable():
+        pts = [_pt("unflagged", 2, 3.8e-3, 1606), _pt("updated", 0, 1.0e-4, 812)]
+        v = frontier_verdict(pts)
+        assert v["comparable"] and len(v["frontier"]) == 1, v
+        assert v["frontier"][0]["arm"] == "updated"
+        assert v["verdict"] == "prior updating dominates every other point", v
+
+    def _updated_arm_refuses_to_parallelise():
+        c = code_from_key("[[72, 12, 6]]")
+        assert "updated" in PARETO_ARMS
+        try:
+            pareto_point(c, 3, 1e-3, 100, 1, "updated", 0, workers=4)
+        except ValueError as exc:
+            assert "parallelis" in str(exc), exc
+        else:
+            raise AssertionError("the updated arm accepted workers > 1")
+
+    def _updated_arm_runs_and_records_its_regime():
+        c = code_from_key("[[72, 12, 6]]")
+        r = pareto_point(c, 3, 1e-3, 120, 7, "updated", 0)
+        b = pareto_point(c, 3, 1e-3, 120, 7, "blind", 0, workers=1)
+        assert r["workers"] == 1 and b["workers"] == 1
+        # same circuit and shots, same blind-sized matrix, different priors
+        assert (r["detectors"], r["faults"]) == (b["detectors"], b["faults"])
+        assert r["failures"] <= b["failures"], (r["failures"], b["failures"])
+
+    tests_exp8 = run_checks([
+        ("a point worse on both axes is dropped", _frontier_drops_dominated),
+        ("a genuine speed/accuracy trade-off is kept", _frontier_keeps_a_genuine_tradeoff),
+        ("the frontier is sorted by cost and falls in error", _frontier_is_monotone),
+        ("two points at identical coordinates collapse to one", _frontier_collapses_exact_ties),
+        ("the verdict reports whether a flagged point is on it", _verdict_reads_the_frontier),
+        ("no points is not an error", _empty_input_is_safe),
+        ("points from different worker counts are refused", _mixed_timing_regimes_are_refused),
+        ("one regime ranks, and names a dominating updated point", _one_regime_is_comparable),
+        ("the updated arm refuses workers > 1", _updated_arm_refuses_to_parallelise),
+        ("the updated arm runs and records its regime", _updated_arm_runs_and_records_its_regime),
+    ])
+    render_checks("11.8 accuracy/latency frontier", tests_exp8)
+    return (tests_exp8,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 11.9 Experiment 9 — dynamic prior updating
+
+    Experiment 2 gave the decoder the flag outcomes by adding $m_x T$ **rows** to
+    $H$. That works, and Experiment 8 shows it earns its keep — but it is not the
+    only way to use the same information, and it is the expensive way: the check
+    matrix grows from 468 × 4,392 to 900 × 5,688.
+
+    This experiment uses the flags **without adding a single row**. It decodes the
+    blind matrix — the flagged circuit with its flag rows removed — but replaces
+    the fault priors, per shot, with their posteriors given the observed flag
+    pattern. This is the "dynamic prior updating" of the thesis title, and it has
+    been the untested half of it.
+
+    ### The update is exact, not an approximation
+
+    Measured on the DEM rather than assumed (the tests below assert it):
+
+    | property | [[72,12,6]], $T = 12$ |
+    |:--|--:|
+    | faults lighting at least one flag | 2,592 of 5,688 (45.6%) |
+    | **maximum flag-weight of any fault** | **1** |
+    | faults per flag detector | exactly 6 |
+    | 432 flag detectors × 6 | 2,592 — a disjoint partition |
+
+    Because no fault lights two flags, the flag rows are $m_x T$ **independent**
+    single-parity checks over **disjoint** groups. The posterior therefore
+    factorises and has a closed form. For a group $G$ with flag bit $f$, writing
+    $\lambda_k = 1 - 2p_k$ and $s = (-1)^f$:
+
+    ```latex
+    P(e_j = 1 \mid f) \;=\; p_j \cdot
+      \frac{1 - s\prod_{k \in G \setminus \{j\}} \lambda_k}
+           {1 + s\prod_{k \in G} \lambda_k}
+    ```
+
+    No belief propagation, no iteration, no approximation — and a test checks it
+    against brute-force enumeration of all $2^{|G|}$ patterns.
+
+    The update is also **large**. On [[72,12,6]] a flagged fault's probability
+    moves from $5.33{\times}10^{-4}$ to $0.103$ when its flag fires and to
+    $2.49{\times}10^{-6}$ when it does not — an odds ratio of about 41,000. The
+    flag all but decides the fault.
+
+    ### What this costs, and what it might save
+
+    Each fault takes one of exactly two posterior values, so both are precomputed
+    once and the per-shot update is a single `where` over the fault vector: about
+    50 µs against a decode of several thousand. The decoding problem stays at
+    468 × 5,688 — blind-sized, 1.30× the unflagged matrix instead of sighted's
+    2.49×.
+
+    **The hypothesis.** Prior updating should land near the sighted arm on
+    accuracy, because BP resolves degree-6 checks in roughly one pass anyway, and
+    should beat the blind arm on *time*, because it starts from far better priors
+    and so converges more often. If it falls well short of sighted, that is
+    informative in its own right: it would mean the back-and-forth between the
+    flag and syndrome subsystems matters, which the disjoint structure does not
+    obviously predict.
+
+    /// admonition | This experiment is single-process.
+    Priors change every shot, so `dz.run_zoo`'s process pool cannot be used —
+    it builds each decoder once per chunk. `ldpc` also holds the GIL, so threads
+    do not help either. Budget accordingly: all four arms decode the same shots,
+    so the cost is roughly four single-arm runs. Keep OSD order at 0 for the
+    first pass.
+    ///
+    """)
+    return
+
+
+@app.cell
+def _(np):
+    def flag_groups(H, mask):
+        """
+        The flag rows of H as groups of fault indices, padded to a rectangle.
+
+        Returns (idx, disjoint, info). `idx` is (n_flag_rows, max_group) with -1
+        in the padding. `disjoint` is False when some fault lights more than one
+        flag, in which case the closed form of `flag_posteriors` does not apply
+        and the caller must not use it.
+        """
+        HF = (H[mask] > 0).tocsr()
+        groups = [HF.indices[HF.indptr[i]:HF.indptr[i + 1]]
+                  for i in range(HF.shape[0])]
+        flat = np.concatenate(groups) if groups else np.zeros(0, dtype=np.int64)
+        disjoint = len(flat) == len(np.unique(flat))
+        width = max((len(g) for g in groups), default=0)
+        idx = np.full((len(groups), width), -1, dtype=np.int64)
+        for i, g in enumerate(groups):
+            idx[i, :len(g)] = g
+        return idx, bool(disjoint), dict(
+            flag_rows=len(groups), faults_covered=int(len(flat)),
+            group_sizes=sorted({len(g) for g in groups}),
+            max_flag_weight=int(np.bincount(flat, minlength=1).max()) if len(flat) else 0)
+
+    def flag_posteriors(priors, idx, floor=1e-12, ceiling=1.0 - 1e-12):
+        """
+        Exact per-fault posterior for each flag outcome, computed once.
+
+        Returns (lo, hi, owner): `lo[j]` and `hi[j]` are fault j's probability
+        when its flag reads 0 and 1; `owner[j]` is the index of the flag row that
+        owns fault j, or -1 when no flag touches it. Faults with no flag keep
+        their prior in both vectors, so a shot's prior vector is one `where`.
+
+        The leave-one-out product is formed from prefix and suffix cumulative
+        products rather than by dividing the total, so a prior of exactly 0.5
+        (lambda = 0) cannot produce a division by zero.
+
+        `floor` and `ceiling` only keep the log-likelihood ratio finite at 0 and
+        1; they are deliberately not a probability clamp. A posterior above 0.5 is
+        meaningful -- the flag says the fault is more likely than not -- and
+        clipping it to 0.49 would silently discard that. On [[72,12,6]] the
+        largest posterior is about 0.10, so neither bound is reached in practice.
+        """
+        pad = idx < 0
+        P = np.where(pad, 0.0, priors[np.clip(idx, 0, None)])
+        lam = 1.0 - 2.0 * P                                  # 1 for padding
+        pre = np.ones_like(lam)
+        suf = np.ones_like(lam)
+        if lam.shape[1] > 1:
+            pre[:, 1:] = np.cumprod(lam[:, :-1], axis=1)
+            suf[:, :-1] = np.cumprod(lam[:, :0:-1], axis=1)[:, ::-1]
+        excl = pre * suf                                     # prod over G \ {j}
+        total = (excl * lam)[:, :1] if lam.shape[1] else np.ones((lam.shape[0], 1))
+
+        def post(s):
+            num = P * (1.0 - s * excl) / 2.0
+            den = (1.0 + s * total) / 2.0
+            return np.where(den > 0.0, num / np.where(den > 0.0, den, 1.0), P)
+
+        lo, hi = priors.copy(), priors.copy()
+        owner = np.full(priors.shape[0], -1, dtype=np.int64)
+        keep = ~pad
+        rows = np.broadcast_to(np.arange(idx.shape[0])[:, None], idx.shape)
+        lo[idx[keep]] = np.clip(post(1.0)[keep], floor, ceiling)   # s=+1: flag = 0
+        hi[idx[keep]] = np.clip(post(-1.0)[keep], floor, ceiling)  # s=-1: flag = 1
+        owner[idx[keep]] = rows[keep]
+        return lo, hi, owner
+
+    def shot_priors(lo, hi, owner, flag_bits):
+        """Fault priors for one shot, given which flag detectors fired."""
+        fired = np.zeros(lo.shape[0], dtype=bool)
+        touched = owner >= 0
+        fired[touched] = flag_bits[owner[touched]]
+        return np.where(fired, hi, lo)
+    return flag_groups, flag_posteriors, shot_priors
+
+
+@app.cell
+def _(build_memory_circuit, dem_to_matrices, dz, flag_detector_mask, flag_groups,
+      flag_posteriors, np, shot_priors, time, wilson):
+    def prior_update_run(code, rounds, p, shots, seed, osd_order=0, max_iter=20,
+                         x_detectors=False, arms=("blind", "updated", "sighted"),
+                         on_progress=None):
+        """
+        Decode one set of shots four ways and compare them pairwise.
+
+        Every arm sees the SAME shots of the SAME flagged circuit, so all
+        comparisons here are paired; `unflagged` is a different circuit and is
+        reported for reference only, not paired.
+
+        Arms: `blind` decodes H with the flag rows removed and the DEM's own
+        priors; `updated` decodes that same matrix with the per-shot flag
+        posterior; `sighted` decodes the full matrix including flag rows.
+        """
+        circ = build_memory_circuit(code, rounds, p, use_flags=True,
+                                    x_detectors=x_detectors)
+        H, L, priors = dem_to_matrices(
+            circ.detector_error_model(decompose_errors=False))
+        mask = flag_detector_mask(code, rounds, True, circ.num_detectors,
+                                  x_detectors=x_detectors)
+        idx, disjoint, info = flag_groups(H, mask)
+        if not disjoint:
+            raise ValueError(
+                "some fault lights more than one flag detector, so the exact "
+                f"single-check posterior does not apply here: {info}")
+        lo, hi, owner = flag_posteriors(priors, idx)
+
+        det, obs = circ.compile_detector_sampler(seed=seed).sample(
+            shots, separate_observables=True)
+        det = det.astype(np.uint8)
+        obs = obs.astype(np.uint8)
+        flags = det[:, mask]
+        syn = det[:, ~mask]
+        HS, Lb = H[~mask], L
+
+        # Built through decoder_zoo, not by hand: every other experiment decodes
+        # with min-sum BP at scaling 0.625 on a parallel schedule, and an arm
+        # built with ldpc's own defaults would not be comparable to Experiment 8.
+        _spec = {"kind": "osd", "osd_order": osd_order, "max_iter": max_iter}
+        decoders = {a: dz.make_decoder(dict(_spec), H if a == "sighted" else HS,
+                                       priors)
+                    for a in arms}
+
+        fail = {a: np.zeros(shots, dtype=bool) for a in arms}
+        t_us = {a: np.zeros(shots, dtype=np.float64) for a in arms}
+        for i in range(shots):
+            for a in arms:
+                s = syn[i] if a != "sighted" else det[i]
+                if a == "updated":
+                    decoders[a].dec.update_channel_probs(
+                        shot_priors(lo, hi, owner, flags[i]).tolist())
+                t0 = time.perf_counter()
+                e, _conv, _work = decoders[a].decode(s)
+                t_us[a][i] = (time.perf_counter() - t0) * 1e6
+                fail[a][i] = bool(np.any((Lb @ e) % 2 != obs[i]))
+            if on_progress is not None and (i + 1) % 200 == 0:
+                on_progress(i + 1)
+
+        out = {}
+        for a in arms:
+            k = int(fail[a].sum())
+            ler, cl, ch = wilson(k, shots)
+            out[a] = dict(failures=k, ler=ler, ci_low=cl, ci_high=ch,
+                          time_p50_us=float(np.median(t_us[a])),
+                          time_p99_us=float(np.percentile(t_us[a], 99)),
+                          detectors=int(H.shape[0] if a == "sighted" else HS.shape[0]),
+                          faults=int(H.shape[1]))
+        # Every arm saw the same shots of the same circuit, so each pair gets an
+        # exact McNemar test on its discordant shots.
+        paired = {}
+        for a in arms:
+            for b in arms:
+                if a < b:
+                    x, y, pv = dz.paired_exact(fail[a], fail[b])
+                    paired[f"{a}|{b}"] = dict(a=a, b=b, a_only=x, b_only=y, p=pv)
+        return dict(code=code.name, rounds=int(rounds), p=float(p),
+                    shots=int(shots), seed=int(seed), osd_order=int(osd_order),
+                    x_detectors=bool(x_detectors), arms={a: out[a] for a in arms},
+                    paired=paired, structure=info,
+                    flagged_fraction=float((flags.sum(1) > 0).mean()))
+    return (prior_update_run,)
+
+
+@app.cell
+def _(BB_PRESETS, GB_PRESETS, mo):
+    ui_exp9_code = mo.ui.dropdown(list(BB_PRESETS) + list(GB_PRESETS),
+                                  value="[[72, 12, 6]]", label="Code")
+    ui_exp9_rounds = mo.ui.slider(1, 24, value=12, step=1, label="Rounds T")
+    ui_exp9_p = mo.ui.dropdown(["5e-4", "1e-3", "2e-3", "3e-3"], value="1e-3",
+                               label="Physical error rate p")
+    ui_exp9_shots = mo.ui.number(start=200, stop=100_000, step=200, value=20_000,
+                                 label="Shots")
+    ui_exp9_seed = mo.ui.number(value=20260930, label="Seed")
+    ui_exp9_osd = mo.ui.slider(0, 4, value=0, step=1, label="OSD order")
+    mo.vstack([mo.md("### Experiment 9 — configuration"),
+               mo.hstack([ui_exp9_code, ui_exp9_rounds, ui_exp9_p]),
+               mo.hstack([ui_exp9_shots, ui_exp9_seed, ui_exp9_osd]),
+               mo.md("*Single-process, and all three arms decode every shot, so "
+                     "expect roughly three times one arm's cost. At OSD-0 on "
+                     "[[72,12,6]] that is around 15 ms per shot. Start at 20,000 "
+                     "shots; raise the OSD order only after the first pass, since "
+                     "the blind arm becomes very slow there.*")])
+    return (ui_exp9_code, ui_exp9_osd, ui_exp9_p, ui_exp9_rounds, ui_exp9_seed,
+            ui_exp9_shots)
+
+
+@app.cell
+def _(mo):
+    run_exp9 = mo.ui.run_button(label="Run Experiment 9 — dynamic prior updating")
+    run_exp9
+    return (run_exp9,)
+
+
+@app.cell
+def _(RESULTS_DIR, code_from_key, core_ready, mo, os, prior_update_run, run_exp9,
+      ui_exp9_code, ui_exp9_osd, ui_exp9_p, ui_exp9_rounds, ui_exp9_seed,
+      ui_exp9_shots, write_result_file):
+    exp9_run = None
+    if not core_ready:
+        _out = mo.md("*Locked: the tests above must pass first.*")
+    elif not run_exp9.value:
+        _out = mo.md("*Press **Run Experiment 9**, or load a saved run below.*")
+    else:
+        _cfg = dict(code=ui_exp9_code.value, rounds=int(ui_exp9_rounds.value),
+                    p=float(ui_exp9_p.value), shots=int(ui_exp9_shots.value),
+                    seed=int(ui_exp9_seed.value), osd_order=int(ui_exp9_osd.value))
+        _tag = _cfg["code"].strip("[]").replace(", ", "-")
+        _path = os.path.join(
+            RESULTS_DIR,
+            f"EXP9_{_tag}_T{_cfg['rounds']}_p{_cfg['p']:g}_{_cfg['shots']}shots_"
+            f"seed{_cfg['seed']}_osd{_cfg['osd_order']}.json")
+        with mo.status.progress_bar(total=_cfg["shots"], title="prior updating",
+                                    show_eta=True) as _bar:
+            _seen = [0]
+
+            def _tick(done):
+                _bar.update(done - _seen[0])
+                _seen[0] = done
+
+            _res = prior_update_run(
+                code_from_key(_cfg["code"]), _cfg["rounds"], _cfg["p"],
+                _cfg["shots"], _cfg["seed"], osd_order=_cfg["osd_order"],
+                on_progress=_tick)
+        write_result_file(_path, {"kind": "exp9", "config": _cfg, "result": _res})
+        exp9_run = dict(config=_cfg, result=_res, path=_path)
+        _out = mo.md(f"Finished. Saved to `{_path}`.")
+    _out
+    return (exp9_run,)
+
+
+@app.cell
+def _(RESULTS_DIR, exp9_run, glob, mo, os):
+    _ = exp9_run
+    _files = sorted(glob.glob(os.path.join(RESULTS_DIR, "EXP9_*.json")))
+    ui_exp9_file = mo.ui.dropdown({os.path.basename(f): f for f in _files},
+                                  value=os.path.basename(_files[-1]) if _files else None,
+                                  label="Saved Experiment 9 run")
+    load_exp9_btn = mo.ui.run_button(label="Load Experiment 9")
+    mo.hstack([ui_exp9_file, load_exp9_btn]) if _files else mo.md(
+        "*No saved Experiment 9 runs yet.*")
+    return load_exp9_btn, ui_exp9_file
+
+
+@app.cell
+def _(load_exp9_btn, read_result_file, ui_exp9_file):
+    exp9_loaded = None
+    if load_exp9_btn.value and ui_exp9_file.value:
+        _d = read_result_file(ui_exp9_file.value, "exp9")
+        exp9_loaded = dict(config=_d["config"], result=_d["result"],
+                           path=ui_exp9_file.value)
+    return (exp9_loaded,)
+
+
+@app.cell
+def _(np, plt):
+    def plot_prior_update(result):
+        """Where prior updating lands between the blind and sighted arms."""
+        order = [a for a in ("blind", "updated", "sighted") if a in result["arms"]]
+        col = {"blind": "#c2c2c2", "updated": "#1f6fb4", "sighted": "#555555"}
+        lab = {"blind": "blind\n(flags ignored)", "updated": "prior updating\n(no extra rows)",
+               "sighted": "sighted\n(flag rows in H)"}
+        fig, (a1, a2) = plt.subplots(1, 2, figsize=(10.5, 4.2))
+        xs = np.arange(len(order))
+        for i, a in enumerate(order):
+            m = result["arms"][a]
+            a1.plot(i, m["ler"], "o", ms=11, color=col[a])
+            a1.errorbar(i, m["ler"], yerr=[[m["ler"] - m["ci_low"]],
+                                           [m["ci_high"] - m["ler"]]],
+                        fmt="none", color="k", capsize=5)
+            a1.annotate(f"{m['ler']:.2e}", (i, m["ler"]), fontsize=9, color=col[a],
+                        textcoords="offset points", xytext=(11, 0), va="center")
+            a2.plot(i, m["time_p50_us"], "o", ms=11, color=col[a])
+            a2.annotate(f"{m['time_p50_us']:,.0f} µs", (i, m["time_p50_us"]),
+                        fontsize=9, color=col[a], textcoords="offset points",
+                        xytext=(11, 0), va="center")
+        for ax, t, yl in ((a1, "Accuracy", "logical error rate per shot"),
+                          (a2, "Cost", "median decode time per shot (µs)")):
+            ax.set_xticks(xs, [lab[a] for a in order], fontsize=9)
+            ax.set_yscale("log")
+            ax.set_xlim(-0.5, len(order) - 0.15)
+            ax.set_ylabel(yl)
+            ax.set_title(t)
+            ax.grid(axis="y", which="both", alpha=0.25)
+        fig.suptitle("Does the flag information survive without the flag rows?",
+                     fontsize=12.5)
+        fig.tight_layout()
+        return fig
+    return (plot_prior_update,)
+
+
+@app.cell
+def _(RESULTS_DIR, exp9_loaded, exp9_run, export_bundle, mo, os,
+      plot_prior_update, write_result_file):
+    exp9_data = exp9_run if exp9_run is not None else exp9_loaded
+    mo.stop(exp9_data is None, mo.md("*Run Experiment 9, or load a saved run above.*"))
+
+    _r, _cfg = exp9_data["result"], exp9_data["config"]
+    _A, _d = _r["arms"], _r.get("paired", {})
+    _fig = plot_prior_update(_r)
+
+    _rows = ["| arm | H | LER | 95% CI | median µs | p99 µs |",
+             "|:--|--:|--:|:--|--:|--:|"]
+    for _a in ("blind", "updated", "sighted"):
+        if _a not in _A:
+            continue
+        _m = _A[_a]
+        _rows.append(f"| {_a} | {_m['detectors']} × {_m['faults']} | "
+                     f"{_m['ler']:.2e} | [{_m['ci_low']:.1e}, {_m['ci_high']:.1e}] | "
+                     f"{_m['time_p50_us']:,.0f} | {_m['time_p99_us']:,.0f} |")
+
+    _pairs = []
+    for _k in sorted(_d):
+        _v = _d[_k]
+        _pairs.append(f"| {_v['a']} vs {_v['b']} | {_v['a_only']} | "
+                      f"{_v['b_only']} | {_v['p']:.2e} |")
+    _mc = (["", "All arms decoded identical shots — McNemar exact test.", "",
+            "| comparison | first fails alone | second fails alone | p |",
+            "|:--|--:|--:|--:|"] + _pairs) if _pairs else []
+
+    if "updated" in _A and "sighted" in _A and "blind" in _A:
+        _u, _s, _b = _A["updated"]["ler"], _A["sighted"]["ler"], _A["blind"]["ler"]
+        _recovered = (_b - _u) / (_b - _s) if _b > _s else float("nan")
+        _head = (f"**Prior updating recovers {_recovered:.0%} of the gap between "
+                 f"the blind and sighted arms**, on a check matrix "
+                 f"{_A['updated']['detectors']} × {_A['updated']['faults']} rather "
+                 f"than {_A['sighted']['detectors']} × {_A['sighted']['faults']} — "
+                 f"{(_A['sighted']['detectors'] * _A['sighted']['faults']) / (_A['updated']['detectors'] * _A['updated']['faults']):.2f}× "
+                 "fewer entries.")
+        if _u <= _s * 1.05:
+            _head += ("  \nIt matches the sighted arm within 5%, so the flag rows "
+                      "buy nothing that the exact one-shot posterior does not "
+                      "already capture.")
+        elif _u < _b:
+            _head += ("  \nIt does not reach the sighted arm, so the iteration "
+                      "between the flag and syndrome subsystems carries "
+                      "information the one-shot posterior misses — a result worth "
+                      "reporting in its own right.")
+        else:
+            _head += "  \nIt does not beat the blind arm — check the update first."
+    else:
+        _head = "Run all three arms for the comparison."
+
+    _tag = _cfg["code"].strip("[]").replace(", ", "-")
+    _path = os.path.join(
+        RESULTS_DIR,
+        f"EXP9_{_tag}_T{_cfg['rounds']}_p{_cfg['p']:g}_{_cfg['shots']}shots_"
+        f"seed{_cfg['seed']}_osd{_cfg['osd_order']}.json")
+    write_result_file(_path, {"kind": "exp9", "config": _cfg, "result": _r})
+    _folder = export_bundle(
+        _path, f"Experiment 9 dynamic prior updating — {_cfg['code']}, "
+               f"T={_cfg['rounds']}, p={_cfg['p']:g}",
+        {"prior_update": _fig},
+        {"arms": [dict(arm=_a, **_A[_a]) for _a in _A]},
+        notes=_head)
+    mo.vstack([mo.md("### Experiment 9 — results"), mo.md(_head),
+               mo.md("\n".join(_rows + _mc)), _fig,
+               mo.md(f"Structure: `{_r['structure']}` · "
+                     f"flags fire on {_r['flagged_fraction']:.1%} of shots  \n"
+                     f"Saved to `{_path}` · exported to `{_folder}`")])
+    return (exp9_data,)
+
+
+@app.cell
+def _(build_memory_circuit, code_from_key, dem_to_matrices, dz,
+      flag_detector_mask, flag_groups, flag_posteriors, np, pareto_point,
+      prior_update_run, render_checks, run_checks, shot_priors, sp):
+    def _brute_force_posterior(p, j, f):
+        """Exact marginal of bit j given the group's parity, by enumeration."""
+        import itertools
+        num = den = 0.0
+        for b in itertools.product([0, 1], repeat=len(p)):
+            if sum(b) % 2 != f:
+                continue
+            w = np.prod([p[k] if b[k] else 1 - p[k] for k in range(len(p))])
+            den += w
+            if b[j]:
+                num += w
+        return num / den
+
+    def _closed_form_matches_brute_force():
+        rng = np.random.default_rng(3)
+        for size in (2, 4, 6):
+            pr = rng.uniform(1e-4, 0.3, size)
+            idx = np.arange(size)[None, :]
+            lo, hi, _owner = flag_posteriors(pr, idx)
+            for j in range(size):
+                assert abs(lo[j] - _brute_force_posterior(pr, j, 0)) < 1e-12, (size, j)
+                assert abs(hi[j] - _brute_force_posterior(pr, j, 1)) < 1e-12, (size, j)
+
+    def _padding_does_not_change_a_group():
+        pr = np.array([0.01, 0.02, 0.03, 0.04])
+        a_lo, a_hi, _ = flag_posteriors(pr, np.array([[0, 1, 2, 3]]))
+        b_lo, b_hi, _ = flag_posteriors(pr, np.array([[0, 1, 2, 3, -1, -1]]))
+        assert np.allclose(a_lo, b_lo) and np.allclose(a_hi, b_hi)
+
+    def _half_probability_does_not_divide_by_zero():
+        pr = np.array([0.5, 0.5, 0.1])          # lambda = 0 for two of them
+        lo, hi, _ = flag_posteriors(pr, np.array([[0, 1, 2]]))
+        assert np.all(np.isfinite(lo)) and np.all(np.isfinite(hi)), (lo, hi)
+
+    def _posteriors_are_probabilities():
+        rng = np.random.default_rng(5)
+        pr = rng.uniform(1e-6, 0.4, 30)
+        lo, hi, _ = flag_posteriors(pr, np.arange(30).reshape(5, 6))
+        for v in (lo, hi):
+            assert np.all((v >= 0) & (v <= 1)), v[(v < 0) | (v > 1)]
+
+    def _a_fired_flag_raises_and_a_quiet_one_lowers():
+        pr = np.full(6, 1e-3)
+        lo, hi, _ = flag_posteriors(pr, np.arange(6)[None, :])
+        assert (hi > pr).all() and (lo < pr).all(), (lo[0], pr[0], hi[0])
+
+    def _untouched_faults_keep_their_prior():
+        pr = np.array([1e-3, 2e-3, 3e-3, 4e-3])
+        lo, hi, owner = flag_posteriors(pr, np.array([[0, 1]]))
+        assert lo[2] == pr[2] and hi[3] == pr[3]
+        assert owner[2] == -1 and owner[0] == 0
+
+    def _shot_priors_selects_by_flag():
+        pr = np.full(4, 1e-3)
+        idx = np.array([[0, 1], [2, 3]])
+        lo, hi, owner = flag_posteriors(pr, idx)
+        out = shot_priors(lo, hi, owner, np.array([True, False]))
+        assert out[0] == hi[0] and out[1] == hi[1], out
+        assert out[2] == lo[2] and out[3] == lo[3], out
+
+    def _non_disjoint_groups_are_detected():
+        H = sp.csr_matrix(np.array([[1, 1, 0], [0, 1, 1]], dtype=np.uint8))
+        _idx, ok, info = flag_groups(H, np.array([True, True]))
+        assert not ok, info                       # fault 1 lights both rows
+        _idx, ok, _ = flag_groups(sp.csr_matrix(np.array([[1, 1, 0, 0],
+                                                          [0, 0, 1, 1]],
+                                                         dtype=np.uint8)),
+                                  np.array([True, True]))
+        assert ok
+
+    def _the_real_dem_has_the_structure_the_method_needs():
+        c = code_from_key("[[72, 12, 6]]")
+        circ = build_memory_circuit(c, 6, 1e-3, use_flags=True, x_detectors=False)
+        H, _L, pr = dem_to_matrices(
+            circ.detector_error_model(decompose_errors=False))
+        mask = flag_detector_mask(c, 6, True, circ.num_detectors, x_detectors=False)
+        idx, ok, info = flag_groups(H, mask)
+        assert ok, f"flag groups overlap: {info}"
+        assert info["max_flag_weight"] == 1, info
+        assert info["flag_rows"] == c.hx.shape[0] * 6, info
+        lo, hi, owner = flag_posteriors(pr, idx)
+        touched = owner >= 0
+        assert touched.sum() == info["faults_covered"], (touched.sum(), info)
+        assert (hi[touched] > pr[touched]).all()
+        assert (lo[touched] < pr[touched]).all()
+
+    def _bounds_only_keep_the_llr_finite():
+        # a certain fault: its group's parity must come from it alone
+        pr = np.array([1.0 - 1e-18, 1e-18])
+        lo, hi, _ = flag_posteriors(pr, np.array([[0, 1]]))
+        assert np.all(np.isfinite(np.log(lo / (1 - lo))))
+        assert np.all(np.isfinite(np.log(hi / (1 - hi))))
+        # and a posterior above 0.5 survives rather than being clamped to 0.49
+        pr2 = np.array([0.4, 0.05, 0.05])
+        _lo2, hi2, _ = flag_posteriors(pr2, np.array([[0, 1, 2]]))
+        assert hi2[0] > 0.5, hi2
+
+    def _updated_corrections_reproduce_their_syndrome():
+        # a correction that does not satisfy H e = s would score as a
+        # non-failure whenever the observable happens to match, so check it
+        c = code_from_key("[[72, 12, 6]]")
+        circ = build_memory_circuit(c, 6, 1e-3, use_flags=True, x_detectors=False)
+        H, _L, pr = dem_to_matrices(
+            circ.detector_error_model(decompose_errors=False))
+        mask = flag_detector_mask(c, 6, True, circ.num_detectors, x_detectors=False)
+        idx, _ok, _info = flag_groups(H, mask)
+        lo, hi, owner = flag_posteriors(pr, idx)
+        det, _obs = circ.compile_detector_sampler(seed=11).sample(
+            60, separate_observables=True)
+        det = det.astype(np.uint8)
+        HS = H[~mask]
+        dec = dz.make_decoder({"kind": "osd", "osd_order": 0, "max_iter": 20},
+                              HS, pr)
+        for i in range(60):
+            dec.dec.update_channel_probs(
+                shot_priors(lo, hi, owner, det[i, mask]).tolist())
+            e, _c, _w = dec.decode(det[i, ~mask])
+            assert np.array_equal((HS @ e) % 2, det[i, ~mask]), i
+
+    def _arms_agree_with_experiment_8():
+        # prior_update_run builds its own decoders; if they drift from the ones
+        # pareto_point uses (min-sum, scaling 0.625, parallel schedule) the arms
+        # stop being comparable across experiments. This caught exactly that.
+        c = code_from_key("[[72, 12, 6]]")
+        r9 = prior_update_run(c, 6, 1e-3, 200, 4242, osd_order=0,
+                              arms=("blind", "sighted"))
+        for arm in ("blind", "sighted"):
+            p8 = pareto_point(c, 6, 1e-3, 200, 4242, arm, 0)
+            assert p8["failures"] == r9["arms"][arm]["failures"], (
+                arm, p8["failures"], r9["arms"][arm]["failures"])
+
+    tests_exp9 = run_checks([
+        ("closed form equals brute-force enumeration", _closed_form_matches_brute_force),
+        ("the bounds keep the LLR finite without clamping", _bounds_only_keep_the_llr_finite),
+        ("padding a group leaves it unchanged", _padding_does_not_change_a_group),
+        ("a prior of exactly 0.5 does not divide by zero", _half_probability_does_not_divide_by_zero),
+        ("posteriors stay inside [0, 1]", _posteriors_are_probabilities),
+        ("a fired flag raises its faults, a quiet one lowers them", _a_fired_flag_raises_and_a_quiet_one_lowers),
+        ("faults no flag touches keep their prior", _untouched_faults_keep_their_prior),
+        ("a shot's priors select by its own flag bits", _shot_priors_selects_by_flag),
+        ("overlapping flag groups are detected, not used", _non_disjoint_groups_are_detected),
+        ("the real DEM has disjoint weight-1 flag groups", _the_real_dem_has_the_structure_the_method_needs),
+        ("updated corrections reproduce their syndrome", _updated_corrections_reproduce_their_syndrome),
+        ("the blind and sighted arms match Experiment 8 exactly", _arms_agree_with_experiment_8),
+    ])
+    render_checks("11.9 dynamic prior updating", tests_exp9)
+    return (tests_exp9,)
+
+
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
     ## 12. Results
 
-    Measured on [[72, 12, 6]] and [[144, 12, 12]] at p = 1e-3 under the
-    circuit-level model of §4. Intervals are 95% Wilson.
+    Measured on [[46, 2, 9]], [[72, 12, 6]], [[144, 12, 12]] and [[288, 12, 18]]
+    under the circuit-level model of §4. Intervals are 95% Wilson; paired
+    comparisons use the McNemar exact test. Shots are budgeted per $T$ rather than
+    flat, so the headline sweeps of 250,000 ([[72,12,6]]) and 300,000
+    ([[144,12,12]]) shots at $T = 6$ halve as $T$ doubles; per-point counts are in
+    the tables.
 
-    **R1 — a flag trigger cannot improve accuracy.** *Headroom* (silent failures of
-    the weak decoder that the strong decoder repairs) was **0** on [[72,12,6]] at
-    T = 6 and T = 12, and on [[144,12,12]] across all 16 weak x strong pairs of
-    Experiment 6. Headroom bounds what any trigger can gain, so this is a
-    structural result, not a question of statistics. Underlying it: the weak
-    decoder was never confidently wrong — 0 silent failures in ~15,000 converged
-    shots, a rate below 2.5e-4.
+    **R1 — flag information lowers the logical error rate, substantially.** In
+    Experiment 2's three arms on identical shots at $T = 12$, $p = 10^{-3}$:
 
-    **R2 — the trigger saturates (Experiment 3).** Shots with at least one flag:
-    43% at T = 3, 70% at T = 6, 91% at T = 12, 97% at T = 18, **99%** at T = 24,
-    while the mean number of flag bits grows linearly. Mutual information between
-    "a flag fired" and "the decoder was wrong" is 0.0023 bits. In Experiment 4 the
-    flag rules escalated 76% of shots against 40% for `primary_fail`, at the same
-    logical error rate.
+    | Code | shots | unflagged | flagged, blind | flagged, sighted | sighted gain | McNemar |
+    |:--|--:|--:|--:|--:|--:|--:|
+    | [[46, 2, 9]] | 10,000 | 0.2593 | 0.2149 | 0.1480 | 1.75× | $p = 3{\times}10^{-51}$ |
+    | [[72, 12, 6]] | 125,000 | 0.01037 | 0.01701 | 0.00503 | **2.06×** | $p = 1{\times}10^{-279}$ |
+    | [[144, 12, 12]] | 150,000 | 0.00091 | 0.00194 | 0.00015 | **5.91×** | $p = 2{\times}10^{-67}$ |
 
-    **R3 — flags help as decoder input (Experiment 2).** With the flag outcomes
-    hidden, the flagged circuit is *worse* than no flags (ratio ~1.45, independent
-    of T). With them read by the decoder it is *better* (ratio ~0.77). Both ratios
-    are flat across T = 6-24, so no crossover appears in that range. The hardware
-    costs +25% qubits, +17% two-qubit gates and +24% expected faults per shot.
+    On the two Gross-family codes the blind arm is *worse* than no flags — by
+    1.64× and 2.13× — and that cost is paid whether or not the decoder reads the
+    flags. On [[46, 2, 9]] it is slightly *better* (0.83×), so the hardware penalty
+    is not uniform across code families and should not be quoted as a single
+    number. The sighted arm wins everywhere, by 1.75× to 5.91×, and the gain grows
+    with code size. The effect holds in
+    all 34 configurations run — $p \in \{5{\times}10^{-4}, 10^{-3}, 2{\times}10^{-3}\}$,
+    OSD order 0 and 4, $T \in \{6, 12, 18, 24\}$ — with no crossover in that
+    range. The hardware costs +25% qubits, +17% two-qubit gates, +30% fault
+    mechanisms and +32% expected faults per shot.
 
-    **R4 — switching itself works, and can beat always-accurate.** In the
-    25,000-shot ablation, `primary_fail` had 176 failures against 190 for `always`,
-    escalating only 40% of shots. On 14 shots the weak decoder was right where
-    BP+OSD-0 was wrong, and never the reverse (paired exact test, p ~ 1e-4): its
-    corrections were lighter and more likely.
+    **R2 — no flag trigger can improve on the trivial rule.** Five policies
+    replayed on the same 250,000 shots, [[72,12,6]] at $T = 12$, $p = 10^{-3}$,
+    weak = greedy peeling, strong = BP+OSD-0:
+
+    | Policy | escalates on | LER | 95% CI | median decode |
+    |:--|--:|--:|:--|--:|
+    | never escalate | 0% | 0.36887 | [0.36698, 0.37076] | 22 µs |
+    | flag trigger | 89.3% | 0.02293 | [0.02235, 0.02352] | 3,696 µs |
+    | always escalate | 100% | 0.00538 | [0.00510, 0.00567] | 4,076 µs |
+    | `primary_fail` | 44.4% | **0.00512** | [0.00484, 0.00540] | **31 µs** |
+    | omniscient oracle | 44.4% | **0.00512** | [0.00484, 0.00540] | 31 µs |
+
+    The trivial rule and the oracle are identical **to the shot**. That closes
+    the question: no trigger of any kind can beat "escalate when the primary
+    decoder fails" here. The flag trigger is 4.5× worse than it while escalating
+    twice as often, because flags fire on 89.3% of shots and the 10.7% they miss
+    include shots where peeling did not converge. Experiments 4 and 5 reproduce
+    this at every point tested — four codes, six noise levels from $5{\times}10^{-4}$
+    to $6{\times}10^{-3}$, $T \in \{6, 12\}$, OSD orders 0 and 4.
+
+    **R3 — why: there is no headroom, and the trigger saturates.** *Headroom* —
+    silent failures of the weak decoder that the strong decoder repairs — bounds
+    what any trigger can gain. Over 250,000 shots:
+
+    | weak decoder | converged but wrong | of those, fixable by BP+OSD |
+    |:--|--:|--:|
+    | greedy peeling | 0 | **0** |
+    | BP min-sum, 10 | 5 | **0** |
+    | BP min-sum, 30 | 10 | **0** |
+    | BP sum-product, 30 | 27 | **8** |
+
+    At most 8 shots in 250,000 ($3.2{\times}10^{-5}$) are reachable by any rule,
+    and for three of the four weak decoders the bound is exactly zero. Separately,
+    the trigger saturates: shots with at least one flag are 43% at $T = 3$, 69% at
+    $T = 6$, 91% at $T = 12$, 97% at $T = 18$ and **99%** at $T = 24$, so mutual
+    information between "a flag fired" and "peeling was wrong" is 0.017 bits.
+    Both mechanisms are structural and neither improves with more shots.
+
+    **R4 — switching itself works; it just does not need flags.** `primary_fail`
+    reaches always-escalate accuracy (0.00512 against 0.00538) while running the
+    expensive decoder on 44.4% of shots, at **131× lower median latency** — 31 µs
+    against 4,076 µs. This is a real result about decoder switching, and the
+    signal it uses is the primary decoder's own convergence flag, not a flag qubit.
+
+    **R5 — the pipeline reproduces two independent references.** On §5.1's
+    reference circuit the fault count matches Theorem 1 exactly and $\lambda$
+    matches Theorem 2 to within 2% on all three Gross-family codes; the Theorem
+    3/5 prediction evaluated on our own fault graph gives 0.935, 0.874 and 0.764
+    against Table II's 0.935, 0.879 and 0.778. Independently, the rotated surface
+    code at $d = 3, 5, 7$ crosses at 1.07%, against the ~1% literature value.
     """)
     return
 
@@ -4896,13 +7074,20 @@ def _(mo):
     mo.md(r"""
     ## Discussion and limitations
 
-    **Why the trigger fails.** A useful trigger needs three things, and this
-    setting supplies none: the fast decoder must fail silently (measured below
-    2.5e-4); the trigger must be selective (flags fire on 70-99% of shots, and
-    worsen with T); and the fast decoder must be expensive enough to be worth
-    skipping (compiled peeling costs 0.16 ms against 38 ms for BP+OSD). The flag
-    outcomes are informative — 432 detectors' worth — but "did any flag fire?"
-    compresses them into one nearly-constant bit.
+    **Why the trigger fails.** A useful trigger needs two things, and this setting
+    supplies neither. First, the fast decoder must fail *silently*, because a
+    failure it reports itself is already caught by `primary_fail` — greedy peeling
+    produced zero silent failures in 250,000 shots, and across all four weak
+    decoders at most 8 of them were repairable. Second, the trigger must be
+    selective — flags fire on 69–99% of shots, and it worsens with $T$. The flag
+    outcomes are informative in aggregate — 432 detectors' worth, which is exactly
+    why R1 works — but "did any flag fire?" compresses them into one
+    nearly-constant bit carrying 0.017 bits of information about failure.
+
+    That the fast decoder is cheap enough to be worth running first is the one
+    precondition that *is* met: the decoders themselves run at a median 22.5 µs
+    against 4,047 µs, a 180× ratio. This is why
+    `primary_fail` is such a strong baseline, and why it is the thing to report.
 
     **Why flags still pay.** Read as detectors, the same outcomes let the decoder
     explain faults it would otherwise have to guess at. That this survives the
@@ -4913,20 +7098,32 @@ def _(mo):
 
     **Limitations.**
 
-    1. Our fault model is ~10.8x denser than the reference formula n(wT + T/2 + 1),
-       so absolute rates are not comparable with published figures; every claim
-       here is a relative comparison inside one fixed model. A denser model makes
-       R1 *harder* to obtain, not easier.
-    2. Experiment 2's arms use different circuits, so that comparison is unpaired
-       (blind and sighted are paired with each other).
-    3. Most results come from [[72, 12, 6]]; [[144, 12, 12]] contributes R1 only,
-       and the GB codes are implemented but untested.
-    4. Timings are Python-level. Peeling is compiled, ldpc is C++; cost claims rest
-       on escalation rates and `work`, not on absolute microseconds.
+    1. Our experiment circuit holds 1.42× the fault mechanisms of the reference
+       formula $n(wT + T/2 + 1)$, because it extracts both check families (§5.1).
+       Absolute rates are therefore not directly comparable with published BB
+       figures; every claim here is a relative comparison inside one fixed model.
+       A denser model makes R2 and R3 *harder* to obtain, not easier. The
+       reference circuit of §5.1 closes this gap exactly when a comparable number
+       is needed.
+    2. Experiment 2's unflagged arm uses a different circuit from the two flagged
+       arms, so that leg is unpaired; blind and sighted are paired with each other,
+       and the McNemar p-values in R1 are computed on that paired pair only.
+    3. [[288, 12, 18]] contributes to R5 but not to R1: at 10,000 shots both arms
+       record zero failures, so the largest code is unresolved. R1's scaling claim
+       rests on three codes, not four.
+    4. Timings are Python-level CPU wall-clock, measured while worker processes
+       compete for cores. Peeling is compiled with numba, `ldpc` is C++. Use the
+       ratios (180× peel-to-OSD, 131× latency saving for `primary_fail`), never
+       the absolute microseconds — §10.1 states this in full.
     5. Flags are placed on X-checks only, which is what a Z-basis memory needs.
+       A logical-operation circuit, or an X-basis memory, would place them
+       differently and is not covered.
     6. Conclusions apply to superconducting bicycle-type architectures: degree-6
-       connectivity with long-range couplers, p near 1e-3, and syndrome cycles
-       short enough for decoder latency to matter.
+       connectivity with long-range couplers, $p$ near $10^{-3}$, and syndrome
+       cycles short enough for decoder latency to matter.
+    7. R2's null is established for *pre-decode* triggers built from flag bits.
+       It does not rule out a trigger built from the primary decoder's own soft
+       information, which is a different signal and was not tested.
     """)
     return
 
@@ -4937,23 +7134,44 @@ def _(mo):
     ## Conclusion and future work
 
     Flag information is valuable to a decoder and worthless as a routing signal.
-    Fed to the decoder as detectors it lowers the logical error rate by roughly a
-    quarter, even though the flag circuitry alone raises it by roughly a half. Used
-    as a pre-decode trigger it cannot help: the fast decoder is never confidently
-    wrong, so there is nothing to catch, and the flags fire on nearly every shot,
-    so there is nothing to discriminate. Both statements are measured rather than
-    argued, with a positive control showing the analysis detects the effect when it
-    is present.
+    The flag qubits are worth building only if the decoder reads them.
+
+    Fed to the decoder as detectors, flag outcomes lower the logical error rate by
+    2.06× on [[72, 12, 6]] and 5.91× on [[144, 12, 12]], even though the same
+    circuitry with its outcomes hidden *raises* the rate by 1.6–2.1×. The
+    information is worth roughly four times the hardware it rides on, and the gain
+    grows with code size.
+
+    Used as a pre-decode trigger it cannot help, and the reason is structural
+    rather than statistical. Over 250,000 paired shots the rule "escalate when the
+    primary decoder fails" achieves exactly the same logical error rate as an
+    omniscient oracle that escalates only when escalating would change the answer.
+    A rule that ties the oracle cannot be beaten. Underneath that: greedy peeling
+    never returned a wrong answer while claiming convergence, so there is nothing
+    for a trigger to catch, and flags fire on 99% of shots by $T = 24$, so there
+    is nothing to discriminate. Both statements are measured rather than argued,
+    with a positive control showing the analysis detects the effect when it is
+    injected.
+
+    Two further results stand on their own. Switching itself works: `primary_fail`
+    reaches always-escalate accuracy at 131× lower median latency, using the
+    primary decoder's own convergence signal. And the pipeline reproduces
+    Pakhunov (2026) Table II on three codes and the ~1% surface-code threshold,
+    which is what licenses the two null results above.
 
     **Future work.**
 
-    - Graded flag signals (flag count, clustering within a round) or the BP
-      soft-information gap, rather than one binary bit.
-    - Repeat Experiment 2 on [[144, 12, 12]] and on a GB code, and push T past 24
-      to look for the crossover the flat ratios do not yet show.
-    - Reconcile the noise model with the reference formula so absolute rates become
-      directly comparable.
-    - Compare against the other hook-error mitigations at equal p: biased-noise
+    - Graded flag signals (flag count, clustering within a round) as *decoder
+      input* — R1 shows the aggregate is informative, and the natural question is
+      how much of that gain a smaller subset of flag detectors already delivers.
+    - Resolve [[288, 12, 18]] for Experiment 2, most cheaply at $p = 2{\times}10^{-3}$
+      rather than by raising the shot count at $p = 10^{-3}$.
+    - Close the peeling gap of R5 (+0.032, +0.073, +0.117 as $n$ grows): the
+      deficit scales with code size, which points at the dominance rule giving up
+      earlier on denser fault graphs.
+    - A threshold sweep for the BB codes, to sit beside the surface-code baseline
+      of Experiment 7.
+    - Compare against the other hook-error mitigations at equal $p$: biased-noise
       ancillas and CNOT-schedule optimisation.
     """)
     return

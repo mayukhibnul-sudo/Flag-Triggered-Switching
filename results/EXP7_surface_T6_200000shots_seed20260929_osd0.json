@@ -1,0 +1,94 @@
+{
+ "schema": 1,
+ "created": "2026-09-30T12:19:14",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0"
+ },
+ "kind": "exp7",
+ "config": {
+  "distances": [
+   5,
+   7
+  ],
+  "rounds": 6,
+  "ps": [
+   0.0005,
+   0.001
+  ],
+  "shots": 200000,
+  "seed": 20260929,
+  "osd_order": 0,
+  "workers": 12
+ },
+ "points": [
+  {
+   "distance": 5,
+   "rounds": 6,
+   "p": 0.0005,
+   "shots": 200000,
+   "seed": 20260929,
+   "osd_order": 0,
+   "failures": 9,
+   "ler": 4.5e-05,
+   "ci_low": 2.367527468585025e-05,
+   "ci_high": 8.553062768717695e-05,
+   "detectors": 144,
+   "faults": 2085,
+   "qubits": 64,
+   "time_p50_us": 20.0
+  },
+  {
+   "distance": 5,
+   "rounds": 6,
+   "p": 0.001,
+   "shots": 200000,
+   "seed": 20260929,
+   "osd_order": 0,
+   "failures": 80,
+   "ler": 0.0004,
+   "ci_low": 0.0003214368166822468,
+   "ci_high": 0.000497755448272728,
+   "detectors": 144,
+   "faults": 2085,
+   "qubits": 64,
+   "time_p50_us": 292.8999938964844
+  },
+  {
+   "distance": 7,
+   "rounds": 6,
+   "p": 0.0005,
+   "shots": 200000,
+   "seed": 20260929,
+   "osd_order": 0,
+   "failures": 1,
+   "ler": 5e-06,
+   "ci_low": 8.82600616654357e-07,
+   "ci_high": 2.8324838366857648e-05,
+   "detectors": 288,
+   "faults": 4583,
+   "qubits": 118,
+   "time_p50_us": 682.0
+  },
+  {
+   "distance": 7,
+   "rounds": 6,
+   "p": 0.001,
+   "shots": 200000,
+   "seed": 20260929,
+   "osd_order": 0,
+   "failures": 11,
+   "ler": 5.5e-05,
+   "ci_low": 3.071213226833309e-05,
+   "ci_high": 9.849338595207293e-05,
+   "detectors": 288,
+   "faults": 4583,
+   "qubits": 118,
+   "time_p50_us": 859.9000244140625
+  }
+ ],
+ "threshold": null
+}

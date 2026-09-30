@@ -1,0 +1,166 @@
+{
+ "schema": 1,
+ "created": "2026-09-30T02:09:34",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0"
+ },
+ "kind": "exp2",
+ "config": {
+  "code": "[[144, 12, 12]]",
+  "p": 0.001,
+  "rounds": [
+   6,
+   12,
+   18,
+   24
+  ],
+  "shots": 300000,
+  "seed": 20260923,
+  "osd_order": 0,
+  "workers": 12,
+  "x_detectors": false,
+  "scale_shots": true
+ },
+ "points": [
+  {
+   "rounds": 6,
+   "p": 0.001,
+   "shots": 300000,
+   "seed": 20260923,
+   "code": "[[144, 12, 12]]",
+   "x_detectors": false,
+   "arms": {
+    "unflagged": {
+     "failures": 154,
+     "ler": 0.0005133333333333333,
+     "ci_low": 0.00043842218063060195,
+     "ci_high": 0.0006010365087543944
+    },
+    "flagged, blind": {
+     "failures": 303,
+     "ler": 0.00101,
+     "ci_low": 0.0009025433245744798,
+     "ci_high": 0.0011302359783422872
+    },
+    "flagged, sighted": {
+     "failures": 17,
+     "ler": 5.6666666666666664e-05,
+     "ci_low": 3.538154422700622e-05,
+     "ci_high": 9.07555072126711e-05
+    }
+   },
+   "blind_only_fail": 298,
+   "sighted_only_fail": 12,
+   "flagged_fraction": 0.8939466666666667,
+   "mean_flags": 2.2397566666666666,
+   "detectors_flagged": 936,
+   "detectors_unflagged": 504
+  },
+  {
+   "rounds": 12,
+   "p": 0.001,
+   "shots": 150000,
+   "seed": 20260923,
+   "code": "[[144, 12, 12]]",
+   "x_detectors": false,
+   "arms": {
+    "unflagged": {
+     "failures": 136,
+     "ler": 0.0009066666666666666,
+     "ci_low": 0.0007666019129928812,
+     "ci_high": 0.00107229499163146
+    },
+    "flagged, blind": {
+     "failures": 291,
+     "ler": 0.00194,
+     "ci_low": 0.0017297088395705554,
+     "ci_high": 0.0021758018043648466
+    },
+    "flagged, sighted": {
+     "failures": 23,
+     "ler": 0.00015333333333333334,
+     "ci_low": 0.00010218025787870888,
+     "ci_high": 0.00023008856582853673
+    }
+   },
+   "blind_only_fail": 280,
+   "sighted_only_fail": 12,
+   "flagged_fraction": 0.9886733333333333,
+   "mean_flags": 4.47524,
+   "detectors_flagged": 1800,
+   "detectors_unflagged": 936
+  },
+  {
+   "rounds": 18,
+   "p": 0.001,
+   "shots": 100000,
+   "seed": 20260923,
+   "code": "[[144, 12, 12]]",
+   "x_detectors": false,
+   "arms": {
+    "unflagged": {
+     "failures": 152,
+     "ler": 0.00152,
+     "ci_low": 0.0012969340845831044,
+     "ci_high": 0.001781363659530758
+    },
+    "flagged, blind": {
+     "failures": 313,
+     "ler": 0.00313,
+     "ci_low": 0.002802351632456022,
+     "ci_high": 0.0034958224168896985
+    },
+    "flagged, sighted": {
+     "failures": 33,
+     "ler": 0.00033,
+     "ci_low": 0.000234997204578234,
+     "ci_high": 0.0004633919661033851
+    }
+   },
+   "blind_only_fail": 292,
+   "sighted_only_fail": 12,
+   "flagged_fraction": 0.99889,
+   "mean_flags": 6.70256,
+   "detectors_flagged": 2664,
+   "detectors_unflagged": 1368
+  },
+  {
+   "rounds": 24,
+   "p": 0.001,
+   "shots": 75000,
+   "seed": 20260923,
+   "code": "[[144, 12, 12]]",
+   "x_detectors": false,
+   "arms": {
+    "unflagged": {
+     "failures": 152,
+     "ler": 0.0020266666666666666,
+     "ci_low": 0.0017293047369706352,
+     "ci_high": 0.002375039699701527
+    },
+    "flagged, blind": {
+     "failures": 316,
+     "ler": 0.004213333333333334,
+     "ci_low": 0.0037744671680829786,
+     "ci_high": 0.0047029866054314725
+    },
+    "flagged, sighted": {
+     "failures": 21,
+     "ler": 0.00028,
+     "ci_low": 0.00018315185162557745,
+     "ci_high": 0.00042803817573963416
+    }
+   },
+   "blind_only_fail": 303,
+   "sighted_only_fail": 8,
+   "flagged_fraction": 0.99992,
+   "mean_flags": 8.963213333333334,
+   "detectors_flagged": 3528,
+   "detectors_unflagged": 1800
+  }
+ ]
+}
