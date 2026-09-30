@@ -1,0 +1,61 @@
+{
+ "schema": 1,
+ "created": "2026-09-30T19:25:56",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0"
+ },
+ "kind": "exp2",
+ "config": {
+  "code": "[[46, 2, 9]]",
+  "p": 0.003,
+  "rounds": [
+   12
+  ],
+  "shots": 100000,
+  "seed": 20260923,
+  "osd_order": 0,
+  "workers": 12,
+  "x_detectors": false,
+  "scale_shots": true
+ },
+ "points": [
+  {
+   "rounds": 12,
+   "p": 0.003,
+   "shots": 100000,
+   "seed": 20260923,
+   "code": "[[46, 2, 9]]",
+   "x_detectors": false,
+   "arms": {
+    "unflagged": {
+     "failures": 56687,
+     "ler": 0.56687,
+     "ci_low": 0.5637962973262689,
+     "ci_high": 0.5699385651152555
+    },
+    "flagged, blind": {
+     "failures": 59728,
+     "ler": 0.59728,
+     "ci_low": 0.5942365076034163,
+     "ci_high": 0.6003160184667423
+    },
+    "flagged, sighted": {
+     "failures": 53482,
+     "ler": 0.53482,
+     "ci_low": 0.531727213257045,
+     "ci_high": 0.537910111555485
+    }
+   },
+   "blind_only_fail": 23312,
+   "sighted_only_fail": 17066,
+   "flagged_fraction": 0.99745,
+   "mean_flags": 5.95334,
+   "detectors_flagged": 575,
+   "detectors_unflagged": 299
+  }
+ ]
+}

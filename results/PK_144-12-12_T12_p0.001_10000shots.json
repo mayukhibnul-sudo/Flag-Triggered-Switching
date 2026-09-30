@@ -1,0 +1,147 @@
+{
+ "schema": 1,
+ "created": "2026-09-30T03:29:55",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0"
+ },
+ "kind": "pakhunov",
+ "config": {
+  "code": "[[144, 12, 12]]",
+  "p": 0.001,
+  "rounds": [
+   12
+  ],
+  "shots": 10000,
+  "variants": [
+   "Pakhunov reference",
+   "  .. 1 fault/CNOT (control)",
+   "  .. correlated XX",
+   "notebook (both check families)"
+  ],
+  "headline_rounds": 12,
+  "table_ii": 0.879
+ },
+ "source": "Pakhunov (2026), Table II, 'Actual' column",
+ "rows": [
+  {
+   "variant": "Pakhunov reference",
+   "rounds": 12,
+   "p": 0.001,
+   "code": "[[144, 12, 12]]",
+   "kwargs": {
+    "gate_noise": "depolarize2",
+    "extraction": "z-only"
+   },
+   "detectors": 936,
+   "faults": 6192,
+   "theory_faults": 6192,
+   "fault_ratio": 1.0,
+   "lam": 6.15434663408136,
+   "theory_lambda": 6.05664,
+   "lambda_ratio": 1.0161321515033683,
+   "mean_degree": 50.55813953488372,
+   "a0": 0.869,
+   "theory_peel": 0.8742634134295858,
+   "peel": 0.8013,
+   "peel_lo": 0.7933641177008334,
+   "peel_hi": 0.8090044763800645,
+   "uniform_weight": true,
+   "shots": 10000,
+   "column_weight": 3,
+   "cnot": 5184,
+   "meas_faults": 864,
+   "boundary": 144
+  },
+  {
+   "variant": "  .. 1 fault/CNOT (control)",
+   "rounds": 12,
+   "p": 0.001,
+   "code": "[[144, 12, 12]]",
+   "kwargs": {
+    "gate_noise": "one-fault-control",
+    "extraction": "z-only"
+   },
+   "detectors": 936,
+   "faults": 6192,
+   "theory_faults": 6192,
+   "fault_ratio": 1.0,
+   "lam": 7.197984000000002,
+   "theory_lambda": 6.05664,
+   "lambda_ratio": 1.188445078459344,
+   "mean_degree": 50.55813953488372,
+   "a0": 0.869,
+   "theory_peel": 0.8320929934871092,
+   "peel": 0.6433,
+   "peel_lo": 0.6338577193565472,
+   "peel_hi": 0.6526322226673248,
+   "uniform_weight": true,
+   "shots": 10000,
+   "column_weight": 3,
+   "cnot": 5184,
+   "meas_faults": 864,
+   "boundary": 144
+  },
+  {
+   "variant": "  .. correlated XX",
+   "rounds": 12,
+   "p": 0.001,
+   "code": "[[144, 12, 12]]",
+   "kwargs": {
+    "gate_noise": "one-fault-both",
+    "extraction": "z-only"
+   },
+   "detectors": 936,
+   "faults": 6192,
+   "theory_faults": 6192,
+   "fault_ratio": 1.0,
+   "lam": 7.197984000000002,
+   "theory_lambda": 6.05664,
+   "lambda_ratio": 1.188445078459344,
+   "mean_degree": 50.55813953488372,
+   "a0": 0.869,
+   "theory_peel": 0.8320929934871092,
+   "peel": 0.6559,
+   "peel_lo": 0.6465302799717351,
+   "peel_hi": 0.6651499849376973,
+   "uniform_weight": true,
+   "shots": 10000,
+   "column_weight": 3,
+   "cnot": 5184,
+   "meas_faults": 864,
+   "boundary": 144
+  },
+  {
+   "variant": "notebook (both check families)",
+   "rounds": 12,
+   "p": 0.001,
+   "code": "[[144, 12, 12]]",
+   "kwargs": {
+    "gate_noise": "depolarize2",
+    "extraction": "both"
+   },
+   "detectors": 936,
+   "faults": 8784,
+   "theory_faults": 6192,
+   "fault_ratio": 1.4186046511627908,
+   "lam": 9.836166930165561,
+   "theory_lambda": 6.05664,
+   "lambda_ratio": 1.6240303089114694,
+   "mean_degree": 131.01639344262296,
+   "a0": 0.869,
+   "theory_peel": 0.5341863191513415,
+   "peel": 0.3665,
+   "peel_lo": 0.3571087140387983,
+   "peel_hi": 0.37599381729276526,
+   "uniform_weight": true,
+   "shots": 10000,
+   "column_weight": 3,
+   "cnot": 5184,
+   "meas_faults": 864,
+   "boundary": 144
+  }
+ ]
+}

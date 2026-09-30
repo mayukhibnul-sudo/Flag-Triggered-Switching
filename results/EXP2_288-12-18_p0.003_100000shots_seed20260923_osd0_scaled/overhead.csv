@@ -1,0 +1,2 @@
+rounds,qubits_unflagged,qubits_flagged,qubit_overhead,gate_overhead,fault_overhead,lambda_unflagged,lambda_flagged
+12,576,720,0.25,0.16666666666666674,0.29508196721311486,58.85632979653142,77.45454772933039

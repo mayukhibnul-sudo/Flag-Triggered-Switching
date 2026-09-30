@@ -1,0 +1,93 @@
+{
+ "schema": 1,
+ "created": "2026-09-30T12:14:52",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0"
+ },
+ "kind": "exp9",
+ "config": {
+  "code": "[[72, 12, 6]]",
+  "rounds": 12,
+  "p": 0.002,
+  "shots": 20000,
+  "seed": 20260930,
+  "osd_order": 0
+ },
+ "result": {
+  "code": "[[72, 12, 6]]",
+  "rounds": 12,
+  "p": 0.002,
+  "shots": 20000,
+  "seed": 20260930,
+  "osd_order": 0,
+  "x_detectors": false,
+  "arms": {
+   "blind": {
+    "failures": 1642,
+    "ler": 0.0821,
+    "ci_low": 0.07837516203916664,
+    "ci_high": 0.08598534759414303,
+    "time_p50_us": 4384.299999969699,
+    "time_p99_us": 8377.29599996234,
+    "detectors": 468,
+    "faults": 5688
+   },
+   "updated": {
+    "failures": 62,
+    "ler": 0.0031,
+    "ci_low": 0.002419156760327727,
+    "ci_high": 0.003971695684734625,
+    "time_p50_us": 1280.6500000124288,
+    "time_p99_us": 5453.905999795551,
+    "detectors": 468,
+    "faults": 5688
+   },
+   "sighted": {
+    "failures": 725,
+    "ler": 0.03625,
+    "ci_low": 0.03374731582135659,
+    "ci_high": 0.03893080416535636,
+    "time_p50_us": 4933.450000066841,
+    "time_p99_us": 8442.44000006936,
+    "detectors": 900,
+    "faults": 5688
+   }
+  },
+  "paired": {
+   "blind|updated": {
+    "a": "blind",
+    "b": "updated",
+    "a_only": 1601,
+    "b_only": 21,
+    "p": 0.0
+   },
+   "blind|sighted": {
+    "a": "blind",
+    "b": "sighted",
+    "a_only": 1164,
+    "b_only": 247,
+    "p": 2.062682238833294e-142
+   },
+   "sighted|updated": {
+    "a": "sighted",
+    "b": "updated",
+    "a_only": 684,
+    "b_only": 21,
+    "p": 1.1517948397932057e-172
+   }
+  },
+  "structure": {
+   "flag_rows": 432,
+   "faults_covered": 2592,
+   "group_sizes": [
+    6
+   ],
+   "max_flag_weight": 1
+  },
+  "flagged_fraction": 0.98955
+ }
+}
