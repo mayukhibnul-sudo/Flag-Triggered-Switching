@@ -340,9 +340,15 @@ def _():
     failures). The oracle that escalates exactly the shots peeling gets wrong
     fails on 1,216 (36.9% escalated): it escalates a strict *subset* of
     primary_fail's shots, and no implementable flag rule escalates less often than
-    primary_fail. Whether the same flag bits pay off as decoder input — read as
-    extra checks, or turned into exact per-shot priors — is what Experiments 2
-    and 7–11 measure.
+    primary_fail; peeling made no silent error in 8.75 million shots, so there is
+    nothing for a trigger to catch. As decoder input the same bits pay on every
+    code tested. Read as extra checks they lower the failure rate by up to 2.6×;
+    turned into exact per-shot priors (Gallager's parity-check posterior,
+    conditioned flag by flag) they lower it 8.5–69× further with BP+OSD-0 — on
+    [[144,12,12]] to zero failures in 150,000 shots — while making the decode
+    2.3× ([[72,12,6]]) to 4.5× ([[144,12,12]]) faster than the sighted arm's. The advantage over the flag rows is an inference gap of
+    min-sum BP, which Relay-BP closes. Twelve of fourteen pre-registered tests
+    are confirmed (§17, §19).
 
     **How to use this notebook.** Open it with `marimo edit FlaggedDecoding.py`.
     Every section ends with its self-tests; the experiments unlock once all of
@@ -549,17 +555,15 @@ def _():
     **The comparison Takada and Fujii anticipated.** Read as extra checks, the
     flag rows give BP the same bits as the prior update and *more* structure (the
     within-group correlation that a prior vector drops, §11). On paper the
-    sighted arm should therefore do at least as well. Earlier exploratory runs
-    found the opposite by a wide margin (≈ 51× fewer failures for the updated arm
-    on [[72,12,6]]); Experiment 8 measures it under the registered design. If it
-    holds, it is an **inference** gap, not an information gap, and Experiment 12
-    separates its two candidate causes: the short cycles the flag rows add to
-    the Tanner graph, and the min-sum approximation of the check-node update
-    (our closed form is exact arithmetic; min-sum is not, even without loops).
-    Both readings can be true at once: an exact combinatorial decoder (ILP,
-    matching) handed extra constraints solves a better-specified problem, while
-    iterative message passing is the decoder class in which extra checks that
-    share variables with existing checks can make inference worse.
+    sighted arm should therefore do at least as well. With min-sum BP+OSD-0 it
+    does far worse — 254 against 7 failures on [[72,12,6]] at $10^{-3}$
+    (Experiment 8). That is an **inference** gap, not an information gap:
+    Experiment 12 and Experiment 11 show the sighted arm improving to 75 failures
+    with exact sum-product BP and to 6 with Relay-BP on the same shots, while the
+    updated arm stays at 7–8. Short cycles are not the cause (a flag row lies on
+    far fewer 4-cycles than a detector row). Takada and Fujii's expectation is
+    thus borne out for a strong decoder and fails for min-sum BP+OSD, the decoder
+    class in common use for BB codes (§19, R7).
 
     **Beyond the simulated noise model.** The posterior is exact for the DEM's
     noise model. The update needs only per-mechanism probabilities, so priors
@@ -1078,6 +1082,18 @@ def _():
     The diagram below is read from `build_memory_circuit`'s own output for check
     0 of [[72,12,6]]; a self-test fails if the schedule it draws drifts from the
     builder.
+
+    **X-basis memory.** A Z-basis memory decodes X errors, which only X-check
+    ancillas spread into hooks — so that is where the flags sit. The mirror
+    experiment is an X-basis memory with flags on the Z-check ancillas. It needs
+    no second builder: conjugating every qubit by a Hadamard turns a Z-basis
+    memory of the code with its check families **swapped** into an X-basis memory
+    of the original code with flags on its Z checks. The noise model is invariant
+    (two-qubit depolarising is symmetric; a Z-basis reset or measurement flip
+    becomes an X-basis one), and detectors and observables are the same parities,
+    so the detector error models coincide. `x_basis_mirror(code)` returns that
+    swapped code; `four_arm_run(..., basis="X")` uses it. Within a round the
+    mirrored circuit measures the flagged (here: Z) checks first.
     """)
     return
 
@@ -1145,6 +1161,19 @@ def flag_circuit_diagram(code, build_memory_circuit, check_schedule):
                  fontsize=9)
     fig.tight_layout()
     return fig
+
+
+@app.function
+def x_basis_mirror(code):
+    """
+    The code with its X and Z check families (and logicals) swapped. A Z-basis
+    memory of it is, up to a global Hadamard, an X-basis memory of `code` with
+    the flags on its Z-check ancillas (§4); the detector error model is the same.
+    """
+    if code.name.endswith("(X basis)"):
+        raise ValueError(f"{code.name} is already a mirror")
+    return replace(code, name=f"{code.name} (X basis)", hx=code.hz, hz=code.hx,
+                   rank_x=code.rank_z, rank_z=code.rank_x, lx=code.lz, lz=code.lx)
 
 
 @app.function
@@ -1488,6 +1517,20 @@ def _():
         assert n_small < n_big / 3, f"Z-only DEM not thinned: {n_small} vs {n_big}"
         assert n_small < 3 * theory, f"Z-only DEM still {n_small / theory:.1f}x theory"
 
+    def _x_basis_mirror_is_a_valid_flagged_circuit():
+        """The mirror is a valid CSS code; its flagged circuit is silent at p = 0
+        and has the same flag structure (L1, L2, L7) as the Z-basis circuit."""
+        c = bb_from_preset("[[72, 12, 6]]", BB_PRESETS)
+        m = x_basis_mirror(c)
+        assert (m.n, m.k) == (c.n, c.k) and m.hx.shape == c.hz.shape
+        assert not ((m.hx @ m.hz.T).toarray() % 2).any()
+        circ = build_memory_circuit(m, 2, 0.0, use_flags=True, x_detectors=False)
+        det, obs = circ.compile_detector_sampler(seed=1).sample(20, separate_observables=True)
+        assert not det.any() and not obs.any()
+        rz, rx = flag_structure_report(c, 2, 1e-3), flag_structure_report(m, 2, 1e-3)
+        for k in ("group_sizes", "disjoint", "added_mechanisms", "faults_total", "separated_by_flags"):
+            assert rz[k] == rx[k], (k, rz[k], rx[k])
+
     tests_circuit = run_checks([
         ("noiseless circuit: no detector fires, no observable flips", _noiseless_is_silent),
         ("noisy circuit yields a valid DEM (deterministic detectors)", _dem_builds),
@@ -1501,6 +1544,7 @@ def _():
         ("x_detectors=False: silent at p = 0, valid DEM, counts agree",
          _z_only_is_silent_and_valid),
         ("x_detectors=False: flag mask still lands on flag detectors", _z_only_flag_mask),
+        ("X-basis mirror: valid code, silent circuit, same flag structure", _x_basis_mirror_is_a_valid_flagged_circuit),
         ("x_detectors=False: DEM density drops toward the analytic fault count",
          _z_only_thins_the_dem),
     ])
@@ -7819,7 +7863,7 @@ def mcnemar_counts(x, y):
 def four_arm_run(code, rounds, p, shots, seed, decoder="OSD-0", arms=FOUR_ARMS, workers=1,
                  shard=0, x_detectors=False, unflagged_seed=None, checkpoint_dir=None,
                  stem=None, decoder_spec=None, on_progress=None, keep_per_shot=True,
-                 interleave=None):
+                 interleave=None, basis="Z"):
     """
     Decode one configuration with up to four arms: three PAIRED arms on one
     flagged circuit (blind, sighted, updated) and one UNPAIRED arm on the
@@ -7829,7 +7873,9 @@ def four_arm_run(code, rounds, p, shots, seed, decoder="OSD-0", arms=FOUR_ARMS, 
     CKPT["root"]/<stem> for runs of at least CKPT["min_shots"] shots, False =
     off, or a folder. interleave: None = automatic (arms decoded in turns, chunk
     by chunk, whenever the run is single-process and has more than one arm),
-    True / False to force it.
+    True / False to force it. basis: "Z" (default) or "X" -- the X-basis
+    memory with flags on the Z checks, run as the Z-basis memory of
+    x_basis_mirror(code) (§4).
     """
     arms = tuple(a for a in FOUR_ARMS if a in arms)
     unknown = set(arms) - set(FOUR_ARMS)
@@ -7838,6 +7884,10 @@ def four_arm_run(code, rounds, p, shots, seed, decoder="OSD-0", arms=FOUR_ARMS, 
     if x_detectors is None:
         raise ValueError("x_detectors must be True or False")
     code_obj = code_from_key(code) if isinstance(code, str) else code
+    if basis not in ("Z", "X"):
+        raise ValueError(f"basis must be 'Z' or 'X', got {basis!r}")
+    if basis == "X":
+        code_obj = x_basis_mirror(code_obj)
     key = code_obj.name
     spec = dict(decoder_spec) if decoder_spec is not None else dict(CATALOGUE[decoder])
     spec_full = decoder_spec_full(spec)
@@ -7865,7 +7915,7 @@ def four_arm_run(code, rounds, p, shots, seed, decoder="OSD-0", arms=FOUR_ARMS, 
                unflagged_seed=int(unflagged_seed), decoder=decoder, decoder_spec=spec_full,
                x_detectors=bool(x_detectors),
                detector_convention="x+z" if x_detectors else "z-only",
-               arms={}, paired={}, unpaired={}, per_shot={})
+               arms={}, paired={}, unpaired={}, per_shot={}, basis=basis)
     per = {}
 
     def summarise(arm, fail, t, t_up, t_dec, iters, Hrows, faults, ident, backend, info, shash,
@@ -8247,6 +8297,15 @@ def run_grid(experiment, kind, configs, master_seed, workers=1, path=None, scale
             c["seed"] = derive_seed(master_seed, c["code"], float(c["p"]), int(c["rounds"]),
                                     int(c["shard"]))
         c["config_id"] = grid_config_id(c)
+    seen = {}
+    for c in configs:                     # two configs of one cell (e.g. 50k and 10k) need
+        seen.setdefault(c["config_id"], []).append(c)          # distinct ids, folders, keys
+    for cid, group in seen.items():
+        if len(group) > 1:
+            for c in group:
+                c["config_id"] = f"{cid}_n{int(c['shots'])}" + (
+                    "_" + "-".join(c["arms"]) if sum(g["shots"] == c["shots"] for g in group) > 1
+                    else "")
     stem = grid_stem(experiment, configs, master_seed, scaled)
     path = path or os.path.join(RESULTS_DIR, stem + ".json")
     decoders = {}
@@ -8273,7 +8332,7 @@ def run_grid(experiment, kind, configs, master_seed, workers=1, path=None, scale
                          decoder=c["decoder"], arms=c["arms"], workers=workers,
                          shard=c["shard"], decoder_spec=c.get("decoder_spec"),
                          checkpoint_dir=ck if int(c["shots"]) >= CKPT["min_shots"] else False,
-                         stem=stem, on_progress=on_progress)
+                         stem=stem, on_progress=on_progress, basis=c.get("basis", "Z"))
         r["config_id"] = c["config_id"]
         r["tag"] = c.get("tag")
         results.append(r)
@@ -8481,7 +8540,8 @@ def design_table_md(design, us_per_shot=None):
     lines = ["| id | code | T | p | shots | shard | decoder | arms | purpose |",
              "|:--|:--|--:|--:|--:|--:|:--|:--|:--|"]
     for cid, c in design.items():
-        lines.append(f"| {cid} | {c['code']} | {c['rounds']} | {c['p']:g} | {c['shots']:,} | "
+        lines.append(f"| {cid} | {c['code']}{' — X basis' if c.get('basis') == 'X' else ''} | "
+                     f"{c['rounds']} | {c['p']:g} | {c['shots']:,} | "
                      f"{c.get('shard', 0)} | {c.get('decoder', 'OSD-0')} | "
                      f"{', '.join(c.get('arms', FOUR_ARMS))} | {c.get('purpose', '')} |")
     return "\n".join(lines)
@@ -8594,6 +8654,12 @@ def _():
                 continue
             raise AssertionError("merged a duplicate configuration or mixed kinds")
 
+    def _x_basis_runs_and_is_labelled():
+        r = four_arm_run(_c72(), 2, 2e-3, 30, 3, arms=("blind", "updated"), basis="X",
+                         checkpoint_dir=False)
+        assert r["basis"] == "X" and r["code"].endswith("(X basis)")
+        assert r["arms"]["updated"]["failures"] <= 30
+
     def _small_runs_are_single_process():
         """below 2,000 shots the pool is not used."""
         r = four_arm_run(_c72(), 3, 2e-3, 50, 3, arms=("sighted",), workers=4, checkpoint_dir=False)
@@ -8674,6 +8740,7 @@ def _():
         ("Experiment 7/8 wrappers decode the same samples as the runner", _wrapper_matches_runner),
         ("a resumed configuration reproduces failures and says so", _resume_reproduces),
         ("runs below 2,000 shots stay single-process", _small_runs_are_single_process),
+        ("X-basis runs through the same runner and is labelled", _x_basis_runs_and_is_labelled),
         ("single-process runs decode the arms in turns, with identical outcomes", _interleaved_matches_arm_by_arm),
         ("several files of one experiment merge; duplicate configurations are refused", _merge_grids_refuses_duplicates),
         ("the updated arm's priors depend on the flags", _updated_priors_change_per_shot),
@@ -11177,7 +11244,10 @@ def _():
     * A7x — [[46,2,9]] unflagged with OSD-CS4, 20,000 shots, a cross-check of
       the [[46,2,9]] OSD-0 error rate;
     * replication — A1, A2 and A3 (at 100,000) again under an **independent**
-      master seed, reported beside the main runs and never pooled.
+      master seed, reported beside the main runs and never pooled;
+    * A1-X — A1's configuration as an **X-basis** memory with the flags on the
+      Z checks (§4), 50,000 shots, own seed (optional, exploratory, not in the
+      Holm family): a check that the results do not depend on the memory basis.
 
     **T4** ([[288,12,18]]) uses the A6 shards of Experiment 2, summed.
 
@@ -11210,6 +11280,9 @@ def _():
         "A9": dict(code="[[144, 12, 12]]", rounds=12, p=2e-3, shots=50_000, purpose="Holm T11 (optional)"),
         "A7x": dict(code="[[46, 2, 9]]", rounds=12, p=1e-3, shots=20_000, arms=["unflagged"],
                     decoder="OSD-CS4", purpose="cross-check of [[46,2,9]] OSD-0"),
+        "A1-X": dict(code="[[72, 12, 6]]", rounds=12, p=1e-3, shots=50_000, basis="X", tag="xbasis",
+                     seed=derive_seed(E08_MASTER_SEED, "X basis", "[[72, 12, 6]]", 1e-3, 12, 0),
+                     purpose="X-basis mirror of A1 (exploratory, not in Holm)"),
         **{f"rep-{k}": dict(code=c, rounds=12, p=p, shots=n, tag="seed2",
                             seed=derive_seed(E08_MASTER_SEED_2, c, p, 12, 0),
                             purpose="replication, independent seed (not pooled)")
@@ -11218,6 +11291,28 @@ def _():
     }
     E08_DEFAULT = ["A1", "A2", "A3", "A7", "A8", "A7x"]
     return E08_DEFAULT, E08_DESIGN, E08_MASTER_SEED
+
+
+@app.function
+def basis_mirror_rows(results):
+    """Each X-basis configuration beside its Z-basis twin (same code, T, p):
+    failures per arm and the unpaired exact rate ratio X / Z (different circuits)."""
+    z = {(r["code"], r["rounds"], r["p"]): r for r in results
+         if r.get("basis", "Z") == "Z" and not r.get("tag")}
+    rows = []
+    for rx in results:
+        if rx.get("basis") != "X":
+            continue
+        rz = z.get((rx["code"].replace(" (X basis)", ""), rx["rounds"], rx["p"]))
+        if rz is None:
+            continue
+        for arm in [a for a in FOUR_ARMS if a in rx["arms"] and a in rz["arms"]]:
+            kx, kz = rx["arms"][arm]["failures"], rz["arms"][arm]["failures"]
+            rr = rate_ratio_ci(kx, rx["shots"], kz, rz["shots"])
+            rows.append(dict(code=rz["code"], p=rz["p"], arm=arm, shots_x=rx["shots"],
+                             shots_z=rz["shots"], failures_x=kx, failures_z=kz,
+                             ratio=rr["ratio"], lo=rr["lo"], hi=rr["hi"], p_value=rr["p"]))
+    return rows
 
 
 @app.function
@@ -11282,7 +11377,17 @@ def _(E08_DESIGN, E08_MASTER_SEED):
         res["paired"]["sighted|updated"] = dict(a_only=2, b_only=40, p=mcnemar_counts(2, 40))
         assert "does not reach" in e08_headline(res)
 
+    def _e08_mirror_rows():
+        z = dict(code="[[72, 12, 6]]", rounds=12, p=1e-3, shots=1000, basis="Z", tag=None,
+                 arms={"updated": dict(failures=4), "sighted": dict(failures=40)})
+        x = dict(z, code="[[72, 12, 6]] (X basis)", basis="X", tag="xbasis",
+                 arms={"updated": dict(failures=5), "sighted": dict(failures=38)})
+        rows = basis_mirror_rows([z, x])
+        assert {r["arm"] for r in rows} == {"updated", "sighted"}
+        assert all(r["lo"] <= 1 <= r["hi"] for r in rows)
+
     def _e08_design():
+        assert E08_DESIGN["A1-X"]["basis"] == "X" and E08_DESIGN["A1-X"]["tag"] == "xbasis"
         assert E08_DESIGN["A3"]["shots"] == 150_000 and E08_DESIGN["A7x"]["decoder"] == "OSD-CS4"
         s1 = E08_DESIGN["rep-A1"]["seed"]
         assert s1 != derive_seed(E08_MASTER_SEED, "[[72, 12, 6]]", 1e-3, 12, 0)
@@ -11299,6 +11404,7 @@ def _(E08_DESIGN, E08_MASTER_SEED):
     tests_e08 = run_checks([
         ("registered design: A3 150k, A7x OSD-CS4, replication seeds independent, ids unique", _e08_design),
         ("headline says exceeds / matches / does not reach from the paired test", _e08_headline_branches),
+        ("X-basis mirror rows: unpaired rate ratios against the Z-basis twin", _e08_mirror_rows),
         ("Table 5.8 rows carry every arm, time, iteration count and test", _e08_table_rows),
     ])
     render_checks("Experiment 8", tests_e08)
@@ -11415,12 +11521,22 @@ def _(e08_loaded, e08_reexport_btn, e08_run):
     for _r in _res:
         if len(_r["arms"]) > 1:
             _figs[f"arms_{_r['config_id']}"] = plot_prior_update(_r)
+    _mir = basis_mirror_rows(_res)
     _exp = maybe_export(e08_data, "Experiment 8 — prior updating (Table 5.8)", _figs,
                         {"table_5_8": table_5_8_rows(_res), "arms": grid_rows(_res),
-                         "comparisons": comparison_rows(_res)}, reexport=e08_reexport_btn.value)
+                         "comparisons": comparison_rows(_res), "x_basis_mirror": _mir},
+                        reexport=e08_reexport_btn.value)
     mo.vstack([run_status_banner(e08_data["doc"], e08_data["path"]),
                mo.md("\n".join(f"- {e08_headline(r)}" for r in _res if "updated" in r["arms"])),
                mo.md("#### Table 5.8 — failures per arm (paired arms share samples)\n\n" + "\n".join(_t)),
+               mo.md("#### X-basis mirror (exploratory)\n\n| code | p | arm | X basis | Z basis | "
+                     "rate ratio X / Z [95% CI] | p |\n|:--|--:|:--|--:|--:|:--|--:|\n" + "\n".join(
+                         f"| {m['code']} | {m['p']:g} | {m['arm']} | {m['failures_x']} / {m['shots_x']:,} | "
+                         f"{m['failures_z']} / {m['shots_z']:,} | {m['ratio']:.2f} [{m['lo']:.2f}, "
+                         f"{m['hi']:.2f}] | {m['p_value']:.2g} |" for m in _mir)
+                     + "\n\nDifferent circuits, so unpaired (exact conditional rate ratio). A ratio "
+                       "consistent with 1 in every arm means the results do not depend on the "
+                       "memory basis.") if _mir else mo.md(""),
                *list(_figs.values())[:4],
                mo.accordion({"every arm": mo.md(grid_table_md(_res)),
                              "every comparison": mo.md(comparison_table_md(_res))}), _exp])
@@ -12421,8 +12537,9 @@ def decoder_effect_rows(res_a, per_a, res_b, per_b, label_a="min-sum", label_b="
     """
     Same configuration, same shots, two decoders: for every shared arm the
     failures under each, the discordant split and the exact McNemar p-value.
-    Configurations are matched on (code, T, p, shard) and every arm's sample
-    hash must agree, otherwise the pair is refused.
+    Configurations are matched on (code, T, p, shard, shots); configurations
+    with different shot counts decoded different samples and are skipped. A
+    matched pair whose sample hashes differ is refused.
     """
     def key(r):
         return (r["code"], int(r["rounds"]), round(float(r["p"]), 12), int(r.get("shard", 0)))
@@ -12432,6 +12549,8 @@ def decoder_effect_rows(res_a, per_a, res_b, per_b, label_a="min-sum", label_b="
         if ra.get("tag") or key(ra) not in idx_b:
             continue
         rb = idx_b[key(ra)]
+        if int(ra["shots"]) != int(rb["shots"]):
+            continue                      # different shot counts: different samples, not a pair
         pa, pb = (per_a or {}).get(ra.get("config_id")), (per_b or {}).get(rb.get("config_id"))
         if pa is None or pb is None:
             continue
@@ -12686,8 +12805,12 @@ def _():
     | T13 | updated < blind, tuned Relay-BP | E11 R1 | exact McNemar |
     | T14 | per-shot time: updated-OSD-0 < sighted-OSD-0 | E08 A1, single-thread | Wilcoxon signed-rank, one-sided |
 
-    **Decision rule.** Order the p-values; reject H(i) while
-    $p_{(i)} \le 0.05/(14 - i + 1)$; stop at the first failure. A test whose data
+    **Decision rule.** Each test has a null hypothesis H0 (no effect) and the
+    claim H1 above. Order the p-values; reject H0 of test $(i)$ — that is,
+    **confirm** its claim — while $p_{(i)} \le 0.05/(14 - i + 1)$; stop at the
+    first failure. The tables report the outcome as *confirmed* / *not
+    confirmed* rather than "reject", since rejecting H0 is what supports the
+    claim. A test whose data
     are missing enters with $p = 1$ (it cannot be rejected and is reported as
     missing). If A9 is not run, T11 leaves the family **at registration** and
     $m = 13$ (and so on for every test that leaves, e.g. T10 below).
@@ -12874,7 +12997,22 @@ def holm_analysis(e02=None, e08=None, e09=None, e10=None, e11=None, per_shot_e08
         r.update(threshold=x["threshold"], reject=x["reject"], p_holm=x["p_adjusted"])
         if r.get("direction_ok") is False:
             r["reject_note"] = "significant in the OPPOSITE direction to H1" if x["reject"] else ""
+        r["outcome"] = holm_outcome(r)
     return rows, h, m
+
+
+@app.function
+def holm_outcome(row):
+    """Plain-language verdict of one family member. Rejecting the null
+    hypothesis is what CONFIRMS the claim H1, so 'reject' is reported as
+    'confirmed'; a significant result in the opposite direction confirms nothing."""
+    if row.get("missing"):
+        return "not tested (data missing)"
+    if not row.get("reject"):
+        return "not confirmed"
+    if row.get("direction_ok") is False:
+        return "not confirmed (significant in the opposite direction)"
+    return "confirmed"
 
 
 @app.cell
@@ -12892,6 +13030,14 @@ def _():
         assert m == 13
         rows, _h, m = holm_analysis(include_t11=False, include_t10=False)
         assert m == 12 and "T10" not in {r["test"] for r in rows}
+
+    def _outcome_wording():
+        assert holm_outcome(dict(reject=True)) == "confirmed"
+        assert holm_outcome(dict(reject=False)) == "not confirmed"
+        assert holm_outcome(dict(reject=True, direction_ok=False)).startswith("not confirmed")
+        assert holm_outcome(dict(missing=True, reject=False)).startswith("not tested")
+        rows, _h, _m = holm_analysis()
+        assert all(r["outcome"].startswith("not tested") for r in rows)
 
     def _paired_direction():
         res = dict(code="c", p=1e-3, shots=1000, decoder="OSD-0", rounds=12,
@@ -12912,6 +13058,7 @@ def _():
         ("Holm step-down on a known vector; all-one-way k = 9, 10 p-values", _holm_known_vector),
         ("missing tests enter with p = 1; without A9 m = 13", _missing_tests_enter_with_p_one),
         ("paired tests report the split in H1's direction", _paired_direction),
+        ("outcomes read 'confirmed' / 'not confirmed', never a bare 'reject'", _outcome_wording),
         ("paired bootstrap median-ratio interval", _median_ratio_ci),
     ])
     render_checks("17 confirmatory family", tests_holm)
@@ -12966,18 +13113,25 @@ def _(holm_btn, holm_files, holm_t10, holm_t11):
         include_t11=holm_t11.value, include_t10=holm_t10.value)
     _reg = os.path.join(RESULTS_DIR, "registration_holm_family.json")
     _dated = (json.load(open(_reg, encoding="utf-8")).get("written") if os.path.exists(_reg) else None)
-    _t = ["| test | H1 | p | Holm threshold | reject | effect | ratio [95% CI] |",
+    _t = ["| test | claim (H1) | p | Holm threshold | claim | effect | ratio [95% CI] |",
           "|:--|:--|--:|--:|:--|:--|:--|"]
     for _r in holm_rows:
         _rat = (f"{_r['ratio']:.3g} [{_r['ratio_lo']:.3g}, {_r['ratio_hi']:.3g}]"
                 if _r.get("ratio") is not None else "")
-        _pv = "missing" if _r["missing"] else f"{_r['p']:.3g}"
-        _t.append(f"| {_r['test']} | {_r['h1']} | {_pv} | "
-                  f"{_r['threshold']:.4g} | {'**yes**' if _r['reject'] else 'no'} "
-                  f"{_r.get('reject_note', '')} | {_r.get('effect') or ''} | {_rat} |")
+        _pv = ("missing" if _r["missing"] else
+               ("< 1e-300" if _r["p"] == 0 else f"{_r['p']:.3g}"))
+        _oc = _r["outcome"]
+        _t.append(f"| {_r['test']} | {_r['h1']} | {_pv} | {_r['threshold']:.4g} | "
+                  f"{'**' + _oc + '**' if _oc == 'confirmed' else _oc} | "
+                  f"{_r.get('effect') or ''} | {_rat} |")
     mo.vstack([mo.md(f"**m = {_m}** · registration record: "
                      + (f"written {_dated}" if _dated else "**not found** — the family is not registered")),
-               mo.md("\n".join(_t))])
+               mo.md("\n".join(_t)),
+               mo.md("*claim*: **confirmed** means the test's null hypothesis (no effect) is "
+                     "rejected at its Holm threshold, i.e. the evidence supports the claim H1. "
+                     "*not confirmed* means the data do not reach that threshold — it is not "
+                     "evidence for the opposite. A $p$ of 0 in double precision is shown as "
+                     "< 1e-300.")])
     return
 
 
@@ -13149,6 +13303,39 @@ def resolve_source(path, sha, item, root):
 
 
 @app.function
+def shared_sample_check(res_a, res_b):
+    """
+    Which configurations of two grid files decode the same shots. Pairs are
+    matched on (code, T, p, shard, shots); a smaller or larger run of the same
+    configuration (e.g. Experiment 7's 10,000-shot p99 points) is a different
+    sample set and is not compared. Within a matched pair every arm present in
+    both must carry the same sample hash. Returns (number of matched arm pairs,
+    list of mismatches).
+    """
+    def key(r):
+        return (r["code"], int(r["rounds"]), round(float(r["p"]), 12), int(r.get("shard", 0)),
+                int(r["shots"]))
+    by_b = {}
+    for r in res_b:
+        if not r.get("tag"):
+            by_b.setdefault(key(r), []).append(r)
+    matched, bad = 0, []
+    for ra in res_a:
+        if ra.get("tag"):
+            continue
+        for rb in by_b.get(key(ra), []):
+            for arm in set(ra["arms"]) & set(rb["arms"]):
+                ha = ra["arms"][arm].get("sample_sha256")
+                hb = rb["arms"][arm].get("sample_sha256")
+                if ha is None or hb is None:
+                    continue
+                matched += 1
+                if ha != hb:
+                    bad.append(f"{ra['code']} p={ra['p']:g} {ra['shots']:,} shots, {arm}")
+    return matched, bad
+
+
+@app.function
 def tex_table(rows, caption):
     """A plain LaTeX tabular of the rows (numbers to 4 significant figures)."""
     if not rows:
@@ -13268,6 +13455,8 @@ def build_item(item, src, options=None):
             e11=g.get("E11", {}).get("results"),
             per_shot_e08=g.get("E08", {}).get("per_shot"), include_t11=o.get("include_t11", True),
             include_t10=o.get("include_t10", True))
+        rows = [dict({k: v for k, v in r.items() if k not in ("reject", "reject_note", "outcome")},
+                     claim=r["outcome"]) for r in rows]
         return rows, None
     raise KeyError(f"unknown thesis item {item!r}")
 
@@ -13329,14 +13518,14 @@ def _(THESIS_ITEMS):
                         raise MissingSource(f"{item}: no source for {exp} in the manifest")
                 if spec.get("same_samples"):
                     a, b = spec["same_samples"]
-                    sa = src[a]["doc"].get("samples", {})
-                    sb = src[b]["doc"].get("samples", {})
-                    shared = {k.split("_s")[0]: v for k, v in sa.items()}
-                    for k, v in sb.items():
-                        kk = k.split("_s")[0]
-                        if kk in shared and shared[kk].get("flagged") != v.get("flagged"):
-                            raise CaptionMismatch(f"{item}: {a} and {b} do not decode the same samples "
-                                                  f"for {kk}")
+                    matched, bad = shared_sample_check(src[a]["data"].get("results") or [],
+                                                       src[b]["data"].get("results") or [])
+                    if bad:
+                        raise CaptionMismatch(f"{item}: {a} and {b} do not decode the same samples "
+                                              f"for {', '.join(bad)}")
+                    if not matched:
+                        raise CaptionMismatch(f"{item}: no configuration of {a} has a configuration of "
+                                              f"{b} with the same code, T, p and shot count")
                 rows, fig = build_item(item, src, entry.get("options"))
                 base = os.path.join(out_dir, item)
                 if rows is not None:
@@ -13465,11 +13654,17 @@ def _(regenerate, write_manifest):
                                 master_seed=1, detector_convention="z-only", decoders={}),
                     timing=dict(workers_requested=1, workers_effective=[1], backends=[], resumed_chunks=0,
                                 total_chunks=0), results=[])
+        def _res(h, shots=10, dec="OSD-0"):
+            return [dict(code="[[72, 12, 6]]", rounds=12, p=1e-3, shard=0, shots=shots, decoder=dec,
+                         config_id="x", arms={"updated": dict(failures=0, sample_sha256=h)},
+                         paired={}, unpaired={})]
         write_result_file(os.path.join(d, "E08_f.json"),
-                          dict(base, samples={"72-12-6_T12_p0.001_s0_OSD-0": dict(flagged="aaa")}), stamp)
+                          dict(base, results=_res("aaa"),
+                               samples={"72-12-6_T12_p0.001_s0_OSD-0": dict(flagged="aaa")}), stamp)
         stamp7 = start_run("E07-frontier", "E07")
         write_result_file(os.path.join(d, "E07_f.json"),
-                          dict(base, samples={"72-12-6_T12_p0.001_s0_OSD-CS2": dict(flagged="bbb")}), stamp7)
+                          dict(base, results=_res("bbb", dec="OSD-CS2"),
+                               samples={"72-12-6_T12_p0.001_s0_OSD-CS2": dict(flagged="bbb")}), stamp7)
         write_manifest(man, {"E07": "E07_f.json", "E08": "E08_f.json"}, items=("table_5_9",))
         log, code = regenerate(man, os.path.join(d, "out"), what=("table",))
         check("(6) Table 5.9 and 5.8 with different samples -> CaptionMismatch",
@@ -13543,8 +13738,22 @@ def _(regeneration_selftest):
             assert line.startswith("PASS"), line
         return _check
 
+    def _shared_samples_by_shot_count():
+        """Experiment 7's 10k p99 point shares a config id with its 50k point; only
+        equal shot counts are compared, so the 10k point is skipped, not a mismatch."""
+        mk = lambda shots, h, arm: dict(code="c", rounds=12, p=1e-3, shard=0, shots=shots,
+                                        arms={arm: dict(sample_sha256=h)})
+        e07 = [mk(50000, "A", "updated"), mk(10000, "Z", "sighted")]
+        e08 = [dict(mk(50000, "A", "updated"), arms={"updated": dict(sample_sha256="A"),
+                                                     "sighted": dict(sample_sha256="A")})]
+        assert shared_sample_check(e07, e08) == (1, [])
+        assert shared_sample_check([mk(50000, "B", "updated")], e08)[1]
+        assert shared_sample_check([mk(20000, "A", "updated")], e08) == (0, [])
+
     _ok, _lines = regeneration_selftest()
-    tests_regeneration = run_checks([(line[5:], _from_line(line)) for line in _lines])
+    tests_regeneration = run_checks([(line[5:], _from_line(line)) for line in _lines]
+                                    + [("same-sample check compares equal shot counts only",
+                                        _shared_samples_by_shot_count)])
     render_checks("18 regeneration self-test", tests_regeneration)
     return
 
@@ -13593,90 +13802,154 @@ def _():
     mo.md(r"""
     ## 19. Results
 
-    Each thesis item comes from one experiment of this notebook. A number is
-    **final** once its registered run exists and §18 regenerates it; until then
-    it is **pending**, and where an earlier exploratory run gives an indication it
-    is quoted with that run's caveat and replaced by the registered value.
+    Every number below comes from a registered run of this notebook (result
+    files of 28–30 October 2026; all complete, none resumed, none scaled, every
+    timed run single-threaded with arms in turns) and is regenerated by §18.
 
     | thesis item | source | status |
     |---|---|---|
-    | Table 5.1 noise model and peeling | Experiment 1 | theory columns final; measured columns pending |
-    | Tables 5.2–5.5, Fig. 5.2 | Experiment 4: the 250,000-shot grid | counts, CIs, risk ratio and MI final; single-thread times pending |
-    | Table 5.6 flag rate | Experiment 3 | pending |
-    | Table 5.7, Fig. 5.3 | Experiment 2 | pending |
-    | Table 5.8, Fig. 5.4 | Experiment 8 | pending |
-    | Table 5.9, Fig. 5.5 | Experiments 7 and 8 | pending |
-    | Fig. 5.1, $p^*$ | Experiment 6 | pending |
-    | inference-gap ablations | Experiment 12 | cycle counts reproducible on demand; sum-product arms pending |
-    | Holm family T1–T14 | §17 | pending; registered 2026-10-28 |
+    | Table 5.1 noise model and peeling | Experiment 1 | final |
+    | Tables 5.2–5.5, Fig. 5.2 | Experiment 4: 250,000-shot grid (counts) + single-thread re-timing (times) | final |
+    | Table 5.6 flag rate | Experiment 3 | final |
+    | Table 5.7, Fig. 5.3 | Experiment 2 | final |
+    | Table 5.8, Fig. 5.4 | Experiment 8 | final |
+    | Table 5.9, Fig. 5.5 | Experiments 7 and 8 | final |
+    | Fig. 5.1, $p^*$ | Experiment 6 | final for BP+OSD-0; MWPM crossing beyond the grid |
+    | w-family | Experiment 9 | final (revised freeze rule, §17) |
+    | inference-gap ablations | Experiments 10–12 | final, descriptive |
+    | X-basis mirror of A1 | Experiment 8, A1-X | pending (optional, exploratory) |
+    | Holm family T1–T14 | §17 | evaluated: 12 of 14 rejected |
 
-    **R1 — the flag information is useful to a decoder** *(pending,
-    Experiment 2).* An earlier exploratory depth series, at $T = 12$,
-    $p = 10^{-3}$ and BP+OSD with 20 iterations, gave sighted-vs-unflagged
-    ratios of 2.06× ([[72,12,6]]) and 5.91× ([[144,12,12]]); the blind arm cost
-    1.59–1.70× and 1.97–2.14×. Those arms are different circuits, so the
-    comparison is **unpaired**; Experiment 2 measures it on five codes at
-    $3\times10^{-3}$ with exact rate-ratio tests (Holm T7–T9).
+    ### The confirmatory family
+
+    | test | claim | data | result |
+    |---|---|---|---|
+    | T1 | updated < sighted | [[72,12,6]], $10^{-3}$, 50k | 7 vs 254 failures (2 : 249), $p = 2\times10^{-71}$ ✔ |
+    | T2 | updated < sighted | [[72,12,6]], $2\times10^{-3}$, 20k | 55 vs 748 (15 : 708), $p = 2\times10^{-187}$ ✔ |
+    | T3 | updated < sighted | [[144,12,12]], $10^{-3}$, 150k | 0 vs 27 (0 : 27), $p = 1.5\times10^{-8}$ ✔ |
+    | T4 | updated < sighted | [[288,12,18]], $3\times10^{-3}$, 100k | 1 vs 69 (1 : 69), $p = 10^{-19}$ ✔ |
+    | T5 | updated < sighted | [[46,2,9]], $10^{-3}$, 50k | 685 vs 5,792, $p < 10^{-300}$ ✔ |
+    | T6 | updated < sighted | [[48,6,8]], $10^{-3}$, 50k | 273 vs 3,925, $p < 10^{-300}$ ✔ |
+    | T7 | sighted < unflagged | [[72,12,6]], $3\times10^{-3}$, 100k | rate ratio 0.735 [0.717, 0.752] ✔ |
+    | T8 | sighted < unflagged | [[144,12,12]], $3\times10^{-3}$, 100k | 0.392 [0.372, 0.413] ✔ |
+    | T9 | sighted < unflagged | [[288,12,18]], $3\times10^{-3}$, 100k | 0.437 [0.324, 0.583] ✔ |
+    | T10 | gain falls with $w$ | w-family, $7\times10^{-4}$ | slope +0.16 ± 0.11, $p = 0.90$ ✘ |
+    | T11 | gain falls with $p$ | [[72,12,6]], [[144,12,12]] | slope −1.90 ± 0.24, df 1, $p = 0.040 > 0.025$ ✘ |
+    | T12 | updated < sighted, BP+LSD-0 | [[72,12,6]], $10^{-3}$, 50k | 2 : 249, $p = 2\times10^{-71}$ ✔ (see R7) |
+    | T13 | updated < blind, Relay-BP | [[72,12,6]], $2\times10^{-3}$, 20k | 38 vs 117 (16 : 95), ratio 0.33 [0.22, 0.47] ✔ |
+    | T14 | updated faster than sighted | [[72,12,6]], $10^{-3}$, A1 | median time ratio 0.437 [0.355, 0.493] ✔ |
+
+    $p$-values shown as $< 10^{-300}$ underflow to 0 in double precision. The
+    Holm procedure stops at T11 (0.040 against its threshold 0.05/2), so T11 and
+    T10 are not rejected.
+
+    **R1 — flags help any decoder that reads them** *(Experiment 2, T7–T9).*
+    At $p = 3\times10^{-3}$ the flag rows read as checks cut the failure rate
+    against the circuit without flags to 0.74×, 0.39× and 0.44× on [[72,12,6]],
+    [[144,12,12]] and [[288,12,18]]. Building the flags and ignoring them costs
+    accuracy: the blind arm fails 1.34×, 1.46× and 3.2× as often as the unflagged
+    circuit. Prior updating turns the same bits into an 11×, 119× and 158×
+    improvement over the unflagged circuit (1,456 vs 16,091; 43 vs 5,099; 1 vs
+    158). On [[46,2,9]] and [[48,6,8]] every arm fails on more than 14% of shots
+    at this noise level.
 
     **R2 — no flag-derived trigger beats "escalate when the primary fails"**
     *(Experiment 4).* On 250,000 paired shots ([[72,12,6]], $T = 12$,
     $p = 10^{-3}$, peeling → BP+OSD-0), `primary_fail` fails on 1,279 shots and no
-    flag rule fails on fewer. The oracle that escalates exactly peeling's
-    failures fails on 1,216: it escalates a strict **subset** of `primary_fail`'s
-    shots (0 : 63 discordant), and no implementable rule reaches it. Under §13's
-    single cost convention (a pre-escalated shot does not pay the primary), the
-    flag rows of Table 5.2 cost 5,635 and 5,691 µs per shot (p99 11,989 µs) in a
-    12-process pool; the single-thread re-timing supplies the final column. A
-    rule counts as cheaper only if its family-corrected saving interval excludes
-    zero against both `primary_fail` and `always` (§13).
+    flag rule fails on fewer; the oracle that escalates exactly peeling's failures
+    fails on 1,216 and escalates a strict subset of `primary_fail`'s shots
+    (0 : 63). The single-thread re-timing on 20,000 fresh shots, with 19 decoders,
+    reproduces this: `primary_fail` 100 failures at 44.0% escalation, mean cost
+    3,238 µs; `always` 105 failures at 5,629 µs; `flag>=1` 105 failures, 91.4%
+    escalated, 5,564 µs — 72% *more* expensive than `primary_fail`. Across all
+    pairs (Bonferroni m = 616) no flag rule beats `primary_fail` in accuracy. Two
+    BP-ms → Relay-BP pairs show a family-corrected saving of 8–18% with
+    `flag>=2` or `rounds>=2`, but a rule escalating the same number of *random*
+    shots does as well (not flag-informative): the saving comes from skipping
+    the primary BP, not from the flags.
 
-    **R3 — why: no headroom, and the trigger is not selective** *(Experiment 4).*
-    Headroom — silent failures of the primary that the secondary corrects — is 0
-    for peeling, BP-ms-10 and BP-ms-30 (for the min-sum primaries by
-    construction: the secondary re-runs the same BP) and 8 for BP-ps-30 with
-    OSD-0 (at most 10 across all secondaries). Flags fire on most shots at
-    $T = 12$ (law L6: 89.4% on [[72,12,6]]; measured in Experiment 3), and
-    "a flag fired" carries 0.017 bits about peeling's failure (risk ratio 2.38;
-    39.3% of failures on flagged shots against 16.5% expected). Experiment 5
-    extends the silent-failure census to five codes and three noise levels.
+    **R3 — why: no headroom, and the trigger is not selective** *(Experiments 3,
+    4, 5).* Peeling produced **no silent failure** in any of 35 configurations
+    (seven codes × $p \in \{5\times10^{-4}, \ldots, 4\times10^{-3}\}$, 250,000
+    shots each; tightest one-sided 95% bound $1.4\times10^{-5}$ per converged
+    shot), so no pre-decode trigger can gain accuracy over `primary_fail`. In the
+    re-timed grid no non-control pair has headroom above 2. Flags fire on most
+    shots: 89.2% at $T = 12$ on [[72,12,6]] (law L6: 89.4%; L6 lies inside the
+    Wilson interval in 22 of 25 cells, never more than 0.2 percentage points
+    off). "A flag fired" carries 0.018 bits about peeling's failure (risk ratio
+    2.44).
 
     **R4 — switching works without flags** *(Experiment 4, exploratory).*
-    `primary_fail` reaches always-escalate accuracy (0.00512 against 0.00538)
-    while running BP+OSD on 44.4% of shots, at a median 31.4 µs against
-    4,046.9 µs (≈ 129×, 12-process pool). The accuracy edge is by construction:
-    66 shots fail only under `always`, 0 only under `primary_fail`, because a
-    converged peeling correction is never wrong here.
+    Single-threaded, `primary_fail` matches `always` (100 vs 105 failures) at a
+    43% lower mean cost and a median of 24.5 µs against 3,655 µs; the accuracy
+    edge is by construction (0 : 5), since a converged peeling correction is never
+    wrong here.
 
     **R5 — the noise model reproduces the published theory; our peeler does not
-    reach it** *(Experiment 1; measured peeling pending).* On the reference
-    circuit the fault count equals Theorem 1 exactly and $\lambda$ is within 2% of
-    Theorem 2. Theorems 3/5 with Eq. (2)'s density correction give 0.937, 0.878
-    and 0.772 against Table II's 0.935, 0.879 and 0.778 (0.2, 0.1 and 0.6
-    percentage points). An earlier peeling run resolved 0.903, 0.801 and 0.648 —
-    below even the single-pass bound — and all three peeler variants resolve the
-    same shots on [[72,12,6]]; the cause of this residual is **not isolated**.
+    reach it** *(Experiment 1).* The fault count equals Theorem 1 exactly and
+    $\lambda$ is 1.6% above Theorem 2. Measured peeling resolves 0.895, 0.803 and
+    0.647 of shots ([[72,12,6]], [[144,12,12]], [[288,12,18]], 100,000 each)
+    against Theorems 3/5's 0.937, 0.878 and 0.772 — below even the single-pass
+    bound (0.926, 0.857, 0.734). All three peeler variants resolve exactly the same
+    shots; the cause is **not isolated**.
 
-    **R6 — prior updating** *(pending, Experiments 8–12).* Earlier exploratory
-    figures (e.g. 1.00e-4 against 5.10e-3 on [[72,12,6]], 252 : 2 discordant
-    shots, ≈ 51×; no failures on [[144,12,12]]) used 20 BP iterations and timed
-    the decode without the prior update. Experiments 8–11 measure the effect on
-    paired samples with 30 iterations and **the prior update inside the clock**,
-    under the pre-registered Holm family.
+    **R6 — prior updating beats the flag rows as checks, and is faster**
+    *(Experiments 7, 8; T1–T6, T14).* With BP+OSD-0 the updated arm fails 8.5× to 69×
+    less often than the sighted arm on every code and noise level tested, and on
+    [[144,12,12]] it had **no failure** in 150,000 shots at $10^{-3}$ or 50,000 at
+    $2\times10^{-3}$ (sighted: 27 and 141). It is also faster, with the update
+    inside the clock: on [[72,12,6]] a median of 1,280 µs (386 µs of it the
+    update) against 2,932 µs; on [[144,12,12]] 2,998 µs against 13,401 µs. On the
+    accuracy–latency frontier (Table 5.9) the updated arm costs 16% more median
+    time than the unflagged circuit's decode on [[72,12,6]] for 80× fewer
+    failures, and on [[144,12,12]] it is both faster and better than the
+    unflagged decode (2,998 vs 5,696 µs; 0 vs 166 failures). OSD-CS2 adds nothing
+    to the updated arm (7 failures either way) and raises its p99 eighteen-fold.
 
-    The update itself is Gallager's parity-check posterior (§11), so the
-    contribution is not the formula but its exactness on flagged BB circuits
-    (L1, Condition 4.1) and the measured comparison. That comparison runs against
-    an explicit prediction: Takada and Fujii (2024) expect flags used as extra
-    parity checks to reach *lower* error rates than their flag-conditioned
-    weights, and on information alone they are right — the sighted arm sees the
-    same bits and keeps the within-group correlation the prior vector drops. If
-    Experiment 8 confirms the exploratory ordering, the defensible statement is:
-    their expectation is plausible for exact combinatorial decoders and does not
-    hold for iterative message passing on BB codes, where the gap is one of
-    inference. Experiment 12 attributes it to the flag rows' short cycles, to the
-    min-sum approximation, or to both. The result also supports Takada and
-    Fujii's portability argument on new grounds: the update changes only the
-    priors, so it works with any decoder that accepts per-fault probabilities.
+    **R7 — the gap is one of inference, not information** *(Experiments 10–12,
+    descriptive).* Both arms see the same bits. On the same 50,000 shots of
+    [[72,12,6]] at $10^{-3}$, the sighted arm's failures fall from 254 with
+    min-sum BP+OSD-0 to 75 with sum-product BP+OSD-0 and to **6 with Relay-BP**,
+    while the updated arm stays at 7, 8 and 7. Under Relay-BP the two arms are
+    indistinguishable (6 vs 7; 44 vs 38 at $2\times10^{-3}$, $p = 0.45$), and the
+    updated arm keeps only its time advantage (5.1 vs 8.9 ms median). BP+LSD-0
+    fails on exactly the same shots as BP+OSD-0 at $10^{-3}$, so T12 repeats T1
+    rather than testing OSD-independence. Short cycles do not explain the gap: a
+    flag row lies on 33 four-cycles, a detector row on about 460 (BB codes).
+
+    This answers the comparison Takada and Fujii anticipated. Their expectation
+    that flags as extra parity checks reach lower error rates than
+    flag-conditioned weights is borne out *once the decoder is good enough*
+    (Relay-BP); with min-sum BP+OSD, the decoder class most often used for BB
+    codes, it fails by up to 36×. The closed-form update makes a weak decoder
+    perform like a strong one on these bits, at lower cost, with any decoder that
+    accepts per-fault probabilities.
+
+    **R8 — the check-weight trend is code-dependent, not monotone** *(Experiment 9,
+    T10).* At $p = 7\times10^{-4}$ the gain blind/updated is 1.2, 7.6, 59, 17, 18,
+    12, 19.5, 14 and 6.5 for $w = 4 \ldots 12$; the registered slope is positive
+    (+0.16 ± 0.11). The $w = 4$ code ($d \le 3$), which flags barely help, carries
+    the largest weight; without it (exploratory) the slope is −0.13 ± 0.09
+    ($p = 0.09$). The $w = 6$ gain is inflated by an unusually poor blind arm
+    (blind LER 0.26 against 0.0096 for its unflagged circuit). Laws L1–L7 hold on
+    every member (§11); the decoding gain depends at least as much on the
+    individual code as on $w$.
+
+    **R9 — the noise-dependence of the gain** *(T11, not confirmed).* On
+    [[72,12,6]] the gain rises from 15× at $3\times10^{-3}$ to 32× at
+    $2\times10^{-3}$ and 125× at $10^{-3}$ (slope −1.9 in $\ln p$). The registered
+    test drops points with zero updated failures, and [[144,12,12]] had none at
+    $10^{-3}$ and $2\times10^{-3}$, leaving one point for that code and one degree
+    of freedom; the trend is therefore reported as exploratory.
+
+    **R10 — pipeline validation** *(Experiment 6).* On the rotated surface code
+    BP+OSD-0 crosses at $p^* = 1.13\%$ [1.05%, 1.19%] ($d_5/d_7$; 1.08% for
+    $d_3/d_5$, 1.11% for $d_3/d_7$), and at $10^{-3}$ $d = 7$ beats $d = 5$ with
+    non-overlapping intervals (5 vs 28 failures in 200,000 shots). MWPM's
+    $d_5/d_7$ curves do not cross below 1.2% (no crossing in 78% of bootstrap
+    resamples), so its threshold lies above the measured range. The two decoders
+    are indistinguishable (exact McNemar) up to $3\times10^{-3}$; above that MWPM
+    is better (e.g. 175 vs 217 failures at $d = 7$, $5\times10^{-3}$).
     """)
     return
 
@@ -13689,9 +13962,25 @@ def _():
     **Why the trigger fails.** A useful pre-decode trigger needs a primary that
     fails *silently* — failures it reports itself are already caught by
     `primary_fail` — and a selective signal. Peeling produced no silent failure in
-    250,000 shots, and "any flag fired" is true on most shots and nearly
-    uninformative. The flag outcomes are informative in aggregate (Experiments 2
-    and 8 measure how much), but a one-bit summary throws that away.
+    8.75 million shots across seven codes and five noise levels, and "any flag
+    fired" is true on most shots and nearly uninformative. The only cost savings
+    found come from skipping the primary decoder on a fraction of shots, which a
+    random rule achieves as well.
+
+    **Why prior updating wins, and what that means.** The flag outcomes are
+    informative in aggregate — every decoder that reads them improves (R1) — but
+    how much a decoder extracts depends on its inference, not on the bits (R7).
+    Min-sum BP+OSD handed the flag rows as checks recovers only part of the
+    information; exact sum-product recovers more; Relay-BP recovers all of it. The
+    closed-form update needs no such capability: it folds each flag in once,
+    exactly, before decoding, so min-sum BP+OSD-0 with the update matches
+    Relay-BP with flags at $10^{-3}$ (7 against 6–7 failures) and comes close at
+    $2\times10^{-3}$ (55 against 38–44), at about a quarter of Relay-BP's decode
+    time. Takada and
+    Fujii's expectation that extra parity checks should do better is therefore
+    right for a strong decoder and wrong for the decoders in common use; the
+    practical value of the update is that it makes the result independent of the
+    decoder's inference quality.
 
     **Limitations.**
 
@@ -13699,47 +13988,70 @@ def _():
        count because it extracts both check families (the flags sit on the
        X-check ancillas). Absolute rates are not comparable with published BB
        figures; the reference circuit (§5.1) is used whenever they must be.
-    2. Silent-failure headroom in the decoder grid is measured on one code and
-       noise level; Experiment 5 widens it to five codes and three noise levels.
-    3. Comparisons across circuits (flagged vs unflagged) are unpaired by
+    2. Comparisons across circuits (flagged vs unflagged) are unpaired by
        construction and use exact rate-ratio intervals; only arms on one
        circuit are compared shot by shot.
-    4. Timing is Python-level CPU time. Latency claims use single-threaded runs
-       only (Experiment 4's re-timing, Experiment 8's A1 and A3); the 250k
-       grid's original times come from a 12-process pool and are relative only.
-    5. Some older result files ran with X-check detectors on; `LEGACY_PROVENANCE`
-       labels them, and none is a thesis source.
-    6. Stim's sampler is not guaranteed bit-identical across versions or
-       machines; every new result stores its sample hash and a Stim self-check
+    3. Timing is Python-level CPU time on one machine. Latency claims use
+       single-threaded runs only. In Experiment 4's grid the decoders run in a
+       fixed order within each chunk; there, OSD-0 and OSD-CS2 differ by about 30%
+       in median time on shots where they do identical work, so grid timings
+       carry an uncertainty of that order. The four-arm runs (Experiments 2,
+       7–12) rotate the arm order and are not affected.
+    4. T11 as registered discards points with zero updated failures. The updated
+       arm was so strong on [[144,12,12]] (0 failures at $10^{-3}$ and
+       $2\times10^{-3}$) that the test was left with one degree of freedom; the
+       noise-dependence of the gain is reported as exploratory.
+    5. Experiment 9's registered freeze rule was infeasible on the w-family and
+       was revised before the main run (§17); the w-family codes also differ in
+       distance and rate, which confounds any trend in $w$ (R8).
+    6. BP+OSD-0 is a weak decoder for [[46,2,9]] (its unflagged failure rate
+       drops from 23.4% to 6.8% with OSD-CS4), and on [[48,6,8]] and GB24 w=4
+       the sighted arm fails more often than the blind arm. Gains on those codes
+       are relative to a weak baseline.
+    7. The surface-code grid stops at $p = 1.2\%$, below MWPM's threshold.
+    8. Stim's sampler is not guaranteed bit-identical across versions or
+       machines; every result stores its sample hash and a Stim self-check
        digest, and cited runs keep a packed sample sidecar.
-    7. Every new run uses one BP+OSD specification (30 iterations); some earlier
-       exploratory runs used 20.
-    8. Flags are on X-checks only (Z-basis memory); no idle noise is modelled.
-    9. The prior update is lossy by construction: conditioning on a flag leaves
-       its group's faults correlated, and a prior vector keeps only their
-       marginals (§11). It is exact per fault, not as a joint model.
-    10. The posterior is exact for the DEM's noise model, not for a real device.
+    9. Every confirmatory run is a Z-basis memory with flags on the X checks
+       only. By the BB codes' X↔Z symmetry the X-basis memory with flags on the
+       Z checks has the same flag structure (checked in §4); Experiment 8's A1-X
+       tests it on A1's configuration. A memory protecting both bases needs flags
+       on both families, which doubles the flag overhead and adds faults that the
+       other basis's decoder cannot use; that cost is not measured here. No idle
+       noise is modelled.
+    10. The prior update is lossy by construction: conditioning on a flag leaves
+        its group's faults correlated, and a prior vector keeps only their
+        marginals (§11). It is exact per fault, not as a joint model.
+    11. The posterior is exact for the DEM's noise model, not for a real device.
         Per-mechanism probabilities estimated from device data could be
         conditioned on the flags in the same closed form; this is not tested here.
+    12. Pre-registration evidence: the confirmatory family was fixed in this
+        notebook and in a dated project document on 28 October 2026, before
+        sampling. The registration record file in `results/` was written later
+        (30 October) and is not itself evidence of the timing.
 
     ## Conclusion and future work
 
     Flag information is useful to a decoder and not useful as a routing signal.
-    Used as a pre-decode trigger it cannot beat the primary decoder's own
-    convergence flag on the 250,000-shot grid: there is nothing silent to catch,
-    and the trigger is not selective. Whether the information pays as decoder
-    input — read as extra checks, or turned into exact per-shot priors — is
-    decided by the registered runs of Experiments 2 and 7–11 and the Holm family
-    of §17.
+    As a pre-decode trigger it cannot beat the primary decoder's own convergence
+    flag: there is nothing silent to catch, and the trigger is not selective. As
+    decoder input it pays on every code tested — read as extra checks it lowers
+    the failure rate by up to 2.6×, and turned into exact per-shot priors by
+    Gallager's posterior it lowers it by one to two orders of magnitude while
+    making the decode faster. The advantage of the prior update over the flag
+    rows is an inference gap of min-sum BP+OSD, which Relay-BP closes; the update
+    delivers that accuracy with a cheap decoder. Twelve of the fourteen
+    pre-registered tests are confirmed; the predicted decline of the gain with
+    check weight is not, and its decline with noise is seen but not confirmed.
 
-    **Future work.** Priors estimated from device data, conditioned on the
-    flags in closed form; flag-matrix
-    column weight > 1 (overlapping groups, as in Takada and Fujii's circuits),
-    where the closed form no longer applies per flag; isolate the peeler's
-    residual against the single-pass bound;
-    graded flag signals (counts, clustering) as decoder input; a BB-code
-    threshold sweep beside the surface-code baseline; comparison with other
-    hook-error mitigations at equal $p$.
+    **Future work.** Priors estimated from device data, conditioned on the flags
+    in closed form; flag-matrix column weight > 1 (overlapping groups, as in
+    Takada and Fujii's circuits), where the closed form no longer applies per
+    flag; the noise-dependence of the gain with enough shots for nonzero
+    updated failures on [[144,12,12]]; a w-family with matched distance; the
+    surface-code sweep extended above 1.2% for MWPM; isolate the peeler's residual
+    against the single-pass bound; graded flag signals (counts, clustering) as
+    decoder input; comparison with other hook-error mitigations at equal $p$.
     """)
     return
 
