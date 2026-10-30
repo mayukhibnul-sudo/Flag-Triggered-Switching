@@ -1,0 +1,10 @@
+{
+ "data_file": "E01_72-12-6+144-12-12+288-12-18_T12_p0.001_100000shots_seed2026110101_detRef_peel-q-naive-single_v1.json",
+ "data_sha256": "40c5b31a4afa76315d40c61808c70705814552f4b05f34d4bb1e776ba061fa3b",
+ "run_started": "2026-10-28T23:41:19",
+ "run_status": "complete",
+ "run_id": "30562f7767eb40ec92e25bbd8a2dbdb9",
+ "exported": "2026-10-28T23:43:44",
+ "code_sha256": "9a777ffec216c2445ea2a3884e2bed5e8dfd93316f89df1be65329f8d7d887d0",
+ "export_type": "fresh run"
+}

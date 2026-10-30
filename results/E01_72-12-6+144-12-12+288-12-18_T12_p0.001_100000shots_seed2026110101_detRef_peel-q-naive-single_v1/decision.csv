@@ -1,0 +1,4 @@
+code,rounds,p,extraction,gate_noise,single_pass_bound,table_ii,verdict,variants_identical,theory_peel,theory_peel_uncorrected
+"[[72, 12, 6]]",12,0.001,z-only,depolarize2,0.9255981961047431,0.935,unexplained: no peeler variant's interval contains the single-pass bound or the Table II value,True,0.9372445152379606,0.9350205417153069
+"[[144, 12, 12]]",12,0.001,z-only,depolarize2,0.8567320206323544,0.879,unexplained: no peeler variant's interval contains the single-pass bound or the Table II value,True,0.8784272813436398,0.8742634134295858
+"[[288, 12, 18]]",12,0.001,z-only,depolarize2,0.7339897551767971,0.778,unexplained: no peeler variant's interval contains the single-pass bound or the Table II value,True,0.7716344886087781,0.764336516061551

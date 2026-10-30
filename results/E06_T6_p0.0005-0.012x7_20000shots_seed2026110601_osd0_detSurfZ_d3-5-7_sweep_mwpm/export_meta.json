@@ -1,0 +1,10 @@
+{
+ "data_file": "E06_T6_p0.0005-0.012x7_20000shots_seed2026110601_osd0_detSurfZ_d3-5-7_sweep_mwpm.json",
+ "data_sha256": "1d31b87573462349e9e15e1145b64fa3fa44e7b5e65b341e7530ec5498547e2c",
+ "run_started": "2026-10-29T14:51:46",
+ "run_status": "complete",
+ "run_id": "cc6169f621d940418168acc7267f5d99",
+ "exported": "2026-10-29T14:52:54",
+ "code_sha256": "5c623b1e46915b7e197047c21a53f69c01673a99b56d188f172e449f259e7e20",
+ "export_type": "fresh run"
+}

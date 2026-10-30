@@ -1,0 +1,10 @@
+{
+ "data_file": "E03_5codes_T3-24x5_p0.001_200000shots_seed2026110301_flags_detZ.json",
+ "data_sha256": "1898ba767a8b4eefec17daabd20d24afdfec22ca66e1c5bde6267dfe12dcd85d",
+ "run_started": "2026-10-29T11:27:04",
+ "run_status": "complete",
+ "run_id": "5e639affe6a946ef8cf9c2f51863887b",
+ "exported": "2026-10-29T11:28:28",
+ "code_sha256": "5c623b1e46915b7e197047c21a53f69c01673a99b56d188f172e449f259e7e20",
+ "export_type": "fresh run"
+}

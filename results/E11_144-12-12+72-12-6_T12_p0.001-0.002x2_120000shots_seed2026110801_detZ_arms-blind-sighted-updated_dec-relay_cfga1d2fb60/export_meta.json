@@ -1,0 +1,10 @@
+{
+ "data_file": "E11_144-12-12+72-12-6_T12_p0.001-0.002x2_120000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-relay_cfga1d2fb60.json",
+ "data_sha256": "37fec415c13caf2b10a453b6c159f29f09d5ef83d5692cf02f51725558f77adc",
+ "run_started": "2026-10-30T01:57:41",
+ "run_status": "complete",
+ "run_id": "fba9659a2665406ea3e9d2ae54835533",
+ "exported": "2026-10-30T03:03:09",
+ "code_sha256": "4f290232cf460d7e95183886f823218a93c5edaeab50e2a723e5c93d15d09745",
+ "export_type": "fresh run"
+}

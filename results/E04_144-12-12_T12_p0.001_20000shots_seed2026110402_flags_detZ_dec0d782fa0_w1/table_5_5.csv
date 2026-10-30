@@ -1,0 +1,9 @@
+weak,strong,verdict,verdict_accuracy,verdict_cost,nested,nested_mismatch,headroom,m,alpha_family,min_detectable_discordant,pf_failures,pf_escalation,pf_cost_us,always_failures,always_cost_us,best_accuracy_rule,best_cost_rule,best_saving,best_saving_vs_always,median_time_ratio,workers
+peel,OSD-0,inconclusive,inconclusive,not viable,False,,0,56,0.0008928571428571429,12,1,0.6887,8705.160770272374,1,11563.789284124756,,,0.0,0.0,0.0021988830994814634,1
+peel,OSD-0-ps,inconclusive,inconclusive,not viable,False,,0,56,0.0008928571428571429,12,0,0.6887,15427.370010378576,0,19909.505527734374,,,0.0,0.0,0.0016995533369481564,1
+BP-ms-10,OSD-0,impossible by construction: strong decoder re-runs the weak BP,impossible by construction: strong decoder re-runs the weak BP,not attributable,True,0,0,56,0.0008928571428571429,12,1,0.75035,15116.159768884278,1,11563.789284124756,,,0.0,0.0,0.30934813618659973,1
+BP-ms-10,OSD-0-ps,inconclusive,inconclusive,not viable,False,,0,56,0.0008928571428571429,12,0,0.75035,22122.850874938966,0,19909.505527734374,,,0.0,0.0,0.23910033702850342,1
+BP-ms-30,OSD-0,impossible by construction: strong decoder re-runs the weak BP,impossible by construction: strong decoder re-runs the weak BP,not attributable,True,0,0,56,0.0008928571428571429,12,1,0.73685,20511.941333831786,1,11563.789284124756,,,0.0,0.0,0.8269139528274536,1
+BP-ms-30,OSD-0-ps,inconclusive,inconclusive,not viable,False,,0,56,0.0008928571428571429,12,0,0.73685,27353.733955218508,0,19909.505527734374,,,0.0,0.0,0.6391355395317078,1
+BP-ps-30,OSD-0,inconclusive,inconclusive,not viable,False,,0,56,0.0008928571428571429,12,0,0.187,22252.789118707275,1,11563.789284124756,,,0.0,0.0,1.2847952842712402,1
+BP-ps-30,OSD-0-ps,impossible by construction: strong decoder re-runs the weak BP,impossible by construction: strong decoder re-runs the weak BP,not attributable,True,0,0,56,0.0008928571428571429,12,0,0.187,26224.252680725098,0,19909.505527734374,,,0.0,0.0,0.9930396676063538,1

@@ -1,0 +1,43 @@
+{
+ "registered": "2026-10-28",
+ "alpha": 0.05,
+ "m": 14,
+ "tests": [
+  "T1",
+  "T2",
+  "T3",
+  "T4",
+  "T5",
+  "T6",
+  "T7",
+  "T8",
+  "T9",
+  "T10",
+  "T11",
+  "T12",
+  "T13",
+  "T14"
+ ],
+ "a3_shots": 150000,
+ "frontier_pruning": "pilot median < 3 x updated-OSD-0 median",
+ "w_family_freeze": "smallest p with >= 30 projected updated failures at 20k and blind LER <= 0.35",
+ "relay_stop_rule_core_hours": 20.0,
+ "master_seeds": {
+  "E02": 2026110201,
+  "E08": 2026110801,
+  "E08_replication": 2026110802,
+  "E09": 2026110901,
+  "E09_pilot": 2026110902,
+  "E11_tuning": 2026111101
+ },
+ "t11_requires": "E08 A9 ([[144,12,12]], 2e-3); without it T11 leaves the family and m = 13",
+ "deviation_t7_t9": "Boschloo exact unconditional test registered; replaced before sampling by the exact conditional binomial test (computational infeasibility at n = 1e5)",
+ "deviation_t10": "2026-10-30, before E09 main sampling: registered freeze rule infeasible on the w-family; revised to the largest p in {5e-4, 7e-4, 1e-3, 2e-3, 3e-3} with every blind LER <= 0.35 and per-code shots for >= 30 updated failures (20k..200k); alternatively T10 leaves the family (m = 13)",
+ "written": "2026-10-30T11:11:10",
+ "code": {
+  "file": "FlaggedDecoding.py",
+  "sha256": "71f6426562875d1c6602e6232fc40cefc57b1aeb054004150388b32e05bd1d03",
+  "git_commit": null,
+  "git_dirty": null
+ }
+}

@@ -1,0 +1,332 @@
+{
+ "schema": 2,
+ "numbering": "FlaggedDecoding-v1",
+ "config": {
+  "code": "[[72, 12, 6]]",
+  "rounds": 12,
+  "p": 0.002,
+  "shots": 4000,
+  "seed": 2026111101,
+  "detector_convention": "z-only",
+  "grid": [
+   {
+    "gamma0": 0.35,
+    "num_sets": 20,
+    "stop_nconv": 1,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   },
+   {
+    "gamma0": 0.35,
+    "num_sets": 20,
+    "stop_nconv": 5,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   },
+   {
+    "gamma0": 0.35,
+    "num_sets": 100,
+    "stop_nconv": 1,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   },
+   {
+    "gamma0": 0.35,
+    "num_sets": 100,
+    "stop_nconv": 5,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   },
+   {
+    "gamma0": 0.65,
+    "num_sets": 20,
+    "stop_nconv": 1,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   },
+   {
+    "gamma0": 0.65,
+    "num_sets": 20,
+    "stop_nconv": 5,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   },
+   {
+    "gamma0": 0.65,
+    "num_sets": 100,
+    "stop_nconv": 1,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   },
+   {
+    "gamma0": 0.65,
+    "num_sets": 100,
+    "stop_nconv": 5,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   }
+  ],
+  "decoders": {
+   "relay": {
+    "kind": "relay",
+    "gamma0": 0.35,
+    "num_sets": 20,
+    "stop_nconv": 5,
+    "pre_iter": 80,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ]
+   }
+  }
+ },
+ "timing": {
+  "workers_requested": 1,
+  "workers_effective": 1,
+  "backends": [
+   "sequential"
+  ],
+  "resumed_chunks": 0,
+  "total_chunks": 0
+ },
+ "samples": {},
+ "rows": [
+  {
+   "point": 0,
+   "gamma0": 0.35,
+   "num_sets": 20,
+   "stop_nconv": 1,
+   "pre_iter": 80,
+   "set_max_iter": 60,
+   "gamma_dist_interval": [
+    -0.24,
+    0.66
+   ],
+   "failures": 45,
+   "ler": 0.01125,
+   "time_p50_us": 1096.800048828125
+  },
+  {
+   "point": 1,
+   "gamma0": 0.35,
+   "num_sets": 20,
+   "stop_nconv": 5,
+   "pre_iter": 80,
+   "set_max_iter": 60,
+   "gamma_dist_interval": [
+    -0.24,
+    0.66
+   ],
+   "failures": 30,
+   "ler": 0.0075,
+   "time_p50_us": 8492.0
+  },
+  {
+   "point": 2,
+   "gamma0": 0.35,
+   "num_sets": 100,
+   "stop_nconv": 1,
+   "pre_iter": 80,
+   "set_max_iter": 60,
+   "gamma_dist_interval": [
+    -0.24,
+    0.66
+   ],
+   "failures": 45,
+   "ler": 0.01125,
+   "time_p50_us": 1075.25
+  },
+  {
+   "point": 3,
+   "gamma0": 0.35,
+   "num_sets": 100,
+   "stop_nconv": 5,
+   "pre_iter": 80,
+   "set_max_iter": 60,
+   "gamma_dist_interval": [
+    -0.24,
+    0.66
+   ],
+   "failures": 32,
+   "ler": 0.008,
+   "time_p50_us": 8415.25
+  },
+  {
+   "point": 4,
+   "gamma0": 0.65,
+   "num_sets": 20,
+   "stop_nconv": 1,
+   "pre_iter": 80,
+   "set_max_iter": 60,
+   "gamma_dist_interval": [
+    -0.24,
+    0.66
+   ],
+   "failures": 121,
+   "ler": 0.03025,
+   "time_p50_us": 1440.60009765625
+  },
+  {
+   "point": 5,
+   "gamma0": 0.65,
+   "num_sets": 20,
+   "stop_nconv": 5,
+   "pre_iter": 80,
+   "set_max_iter": 60,
+   "gamma_dist_interval": [
+    -0.24,
+    0.66
+   ],
+   "failures": 45,
+   "ler": 0.01125,
+   "time_p50_us": 9269.05078125
+  },
+  {
+   "point": 6,
+   "gamma0": 0.65,
+   "num_sets": 100,
+   "stop_nconv": 1,
+   "pre_iter": 80,
+   "set_max_iter": 60,
+   "gamma_dist_interval": [
+    -0.24,
+    0.66
+   ],
+   "failures": 121,
+   "ler": 0.03025,
+   "time_p50_us": 1448.449951171875
+  },
+  {
+   "point": 7,
+   "gamma0": 0.65,
+   "num_sets": 100,
+   "stop_nconv": 5,
+   "pre_iter": 80,
+   "set_max_iter": 60,
+   "gamma_dist_interval": [
+    -0.24,
+    0.66
+   ],
+   "failures": 43,
+   "ler": 0.01075,
+   "time_p50_us": 9260.349609375
+  }
+ ],
+ "frozen": {
+  "point": 1,
+  "gamma0": 0.35,
+  "num_sets": 20,
+  "stop_nconv": 5,
+  "pre_iter": 80,
+  "set_max_iter": 60,
+  "gamma_dist_interval": [
+   -0.24,
+   0.66
+  ],
+  "failures": 30,
+  "ler": 0.0075,
+  "time_p50_us": 8492.0
+ },
+ "kind": "E11-tuning",
+ "experiment": "E11",
+ "run_id": "fa9e8a551d8242599af14cd6e953bee8",
+ "status": "complete",
+ "started": "2026-10-30T01:55:37",
+ "updated": "2026-10-30T01:55:37",
+ "finished": "2026-10-30T01:55:37",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0",
+  "numba": "0.67.0",
+  "matplotlib": "3.11.2",
+  "pymatching": "2.4.0",
+  "relay-bp": null,
+  "psutil": "7.2.2"
+ },
+ "environment": {
+  "python": "3.12.13",
+  "implementation": "CPython",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "cpu_count": 16,
+  "numba": "numba 0.67.0",
+  "timing": {
+   "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "pinned": false,
+   "logical_cores": 16,
+   "physical_cores": 8,
+   "power_plan": "Power saver",
+   "cpu_mhz": 3401,
+   "cpu_max_mhz": 3401,
+   "on_battery": null,
+   "load_percent": 9.5,
+   "process_priority": "32"
+  }
+ },
+ "code": {
+  "file": "FlaggedDecoding.py",
+  "sha256": "4f290232cf460d7e95183886f823218a93c5edaeab50e2a723e5c93d15d09745",
+  "git_commit": null,
+  "git_dirty": null
+ },
+ "stim_selfcheck": {
+  "digest": "942e75d1004e5106e4540189a60e59500691e08a49bbc29ee4e0220067e5b2d5",
+  "stim": "1.16.0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD"
+ }
+}

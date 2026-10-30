@@ -1,0 +1,10 @@
+{
+ "data_file": "E05_7codes_T12_p0.0005-0.004x5_250000shots_seed2026110501_flags_detZ_peel.json",
+ "data_sha256": "7c7c88f10c09eb0896dc20d3be418bfe13617fe7700760c926fd800f58097973",
+ "run_started": "2026-10-29T13:36:20",
+ "run_status": "complete",
+ "run_id": "18bc8dc57824437381a5356f91198629",
+ "exported": "2026-10-29T14:13:03",
+ "code_sha256": "5c623b1e46915b7e197047c21a53f69c01673a99b56d188f172e449f259e7e20",
+ "export_type": "fresh run"
+}

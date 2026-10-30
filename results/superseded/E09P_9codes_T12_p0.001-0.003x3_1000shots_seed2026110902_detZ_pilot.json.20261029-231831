@@ -1,0 +1,417 @@
+{
+ "schema": 2,
+ "numbering": "FlaggedDecoding-v1",
+ "config": {
+  "codes": [
+   "GB24 w=4 [[48, 6]]",
+   "GB24 w=5 [[48, 4]]",
+   "GB24 w=6 [[48, 2]]",
+   "GB24 w=7 [[48, 4]]",
+   "GB24 w=8 [[48, 2]]",
+   "GB24 w=9 [[48, 4]]",
+   "GB24 w=10 [[48, 2]]",
+   "GB24 w=11 [[48, 4]]",
+   "GB24 w=12 [[48, 2]]"
+  ],
+  "rounds": 12,
+  "ps": [
+   0.001,
+   0.002,
+   0.003
+  ],
+  "shots": 1000,
+  "master_seed": 2026110902,
+  "detector_convention": "z-only",
+  "decoders": {
+   "OSD-0": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 0
+   }
+  },
+  "rule": "smallest p with >= 30 projected updated failures at 20k and blind LER <= 0.35"
+ },
+ "timing": {
+  "workers_requested": 1,
+  "workers_effective": 1,
+  "backends": [
+   "sequential"
+  ],
+  "resumed_chunks": 0,
+  "total_chunks": 0
+ },
+ "samples": {},
+ "rows": [
+  {
+   "code": "GB24 w=4 [[48, 6]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 576818667401285692,
+   "blind_failures": 17,
+   "updated_failures": 14,
+   "blind_ler": 0.017,
+   "projected_updated_20k": 280.0,
+   "time_p50_us": 397.79998779296875
+  },
+  {
+   "code": "GB24 w=4 [[48, 6]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 7250553647338231034,
+   "blind_failures": 61,
+   "updated_failures": 45,
+   "blind_ler": 0.061,
+   "projected_updated_20k": 900.0,
+   "time_p50_us": 435.3500061035156
+  },
+  {
+   "code": "GB24 w=4 [[48, 6]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 3986145561384656839,
+   "blind_failures": 137,
+   "updated_failures": 111,
+   "blind_ler": 0.137,
+   "projected_updated_20k": 2220.0,
+   "time_p50_us": 597.8499755859375
+  },
+  {
+   "code": "GB24 w=5 [[48, 4]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 6274161591276064533,
+   "blind_failures": 4,
+   "updated_failures": 0,
+   "blind_ler": 0.004,
+   "projected_updated_20k": 0.0,
+   "time_p50_us": 577.9000244140625
+  },
+  {
+   "code": "GB24 w=5 [[48, 4]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 1775192818999074886,
+   "blind_failures": 19,
+   "updated_failures": 6,
+   "blind_ler": 0.019,
+   "projected_updated_20k": 120.0,
+   "time_p50_us": 650.5499877929688
+  },
+  {
+   "code": "GB24 w=5 [[48, 4]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 6646815877182596730,
+   "blind_failures": 54,
+   "updated_failures": 14,
+   "blind_ler": 0.054,
+   "projected_updated_20k": 280.0,
+   "time_p50_us": 863.5
+  },
+  {
+   "code": "GB24 w=6 [[48, 2]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 1982713398101609699,
+   "blind_failures": 307,
+   "updated_failures": 8,
+   "blind_ler": 0.307,
+   "projected_updated_20k": 160.0,
+   "time_p50_us": 784.75
+  },
+  {
+   "code": "GB24 w=6 [[48, 2]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 292489908408393769,
+   "blind_failures": 416,
+   "updated_failures": 50,
+   "blind_ler": 0.416,
+   "projected_updated_20k": 1000.0,
+   "time_p50_us": 873.4500122070312
+  },
+  {
+   "code": "GB24 w=6 [[48, 2]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 1256806178558173957,
+   "blind_failures": 444,
+   "updated_failures": 109,
+   "blind_ler": 0.444,
+   "projected_updated_20k": 2180.0,
+   "time_p50_us": 1448.199951171875
+  },
+  {
+   "code": "GB24 w=7 [[48, 4]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 6993218256011885877,
+   "blind_failures": 50,
+   "updated_failures": 8,
+   "blind_ler": 0.05,
+   "projected_updated_20k": 160.0,
+   "time_p50_us": 1251.89990234375
+  },
+  {
+   "code": "GB24 w=7 [[48, 4]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 8567631178220002879,
+   "blind_failures": 206,
+   "updated_failures": 19,
+   "blind_ler": 0.206,
+   "projected_updated_20k": 380.0,
+   "time_p50_us": 1824.5
+  },
+  {
+   "code": "GB24 w=7 [[48, 4]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 8628789836522331094,
+   "blind_failures": 425,
+   "updated_failures": 87,
+   "blind_ler": 0.425,
+   "projected_updated_20k": 1740.0,
+   "time_p50_us": 4841.94970703125
+  },
+  {
+   "code": "GB24 w=8 [[48, 2]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 9087347197784740249,
+   "blind_failures": 35,
+   "updated_failures": 1,
+   "blind_ler": 0.035,
+   "projected_updated_20k": 20.0,
+   "time_p50_us": 2628.55029296875
+  },
+  {
+   "code": "GB24 w=8 [[48, 2]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 3680879644973339502,
+   "blind_failures": 132,
+   "updated_failures": 22,
+   "blind_ler": 0.132,
+   "projected_updated_20k": 440.0,
+   "time_p50_us": 6697.0
+  },
+  {
+   "code": "GB24 w=8 [[48, 2]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 5062231768871160632,
+   "blind_failures": 304,
+   "updated_failures": 105,
+   "blind_ler": 0.304,
+   "projected_updated_20k": 2100.0,
+   "time_p50_us": 7372.349609375
+  },
+  {
+   "code": "GB24 w=9 [[48, 4]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 4877078842592349016,
+   "blind_failures": 176,
+   "updated_failures": 19,
+   "blind_ler": 0.176,
+   "projected_updated_20k": 380.0,
+   "time_p50_us": 2266.0498046875
+  },
+  {
+   "code": "GB24 w=9 [[48, 4]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 7358626270261465334,
+   "blind_failures": 547,
+   "updated_failures": 121,
+   "blind_ler": 0.547,
+   "projected_updated_20k": 2420.0,
+   "time_p50_us": 6596.7001953125
+  },
+  {
+   "code": "GB24 w=9 [[48, 4]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 4992224533114223880,
+   "blind_failures": 759,
+   "updated_failures": 315,
+   "blind_ler": 0.759,
+   "projected_updated_20k": 6300.0,
+   "time_p50_us": 8513.7001953125
+  },
+  {
+   "code": "GB24 w=10 [[48, 2]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 119987192260506545,
+   "blind_failures": 158,
+   "updated_failures": 15,
+   "blind_ler": 0.158,
+   "projected_updated_20k": 300.0,
+   "time_p50_us": 6192.4501953125
+  },
+  {
+   "code": "GB24 w=10 [[48, 2]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 1553031127384542812,
+   "blind_failures": 372,
+   "updated_failures": 114,
+   "blind_ler": 0.372,
+   "projected_updated_20k": 2280.0,
+   "time_p50_us": 10357.099609375
+  },
+  {
+   "code": "GB24 w=10 [[48, 2]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 4729386604838938452,
+   "blind_failures": 602,
+   "updated_failures": 334,
+   "blind_ler": 0.602,
+   "projected_updated_20k": 6680.0,
+   "time_p50_us": 15014.349609375
+  },
+  {
+   "code": "GB24 w=11 [[48, 4]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 8105539448796999193,
+   "blind_failures": 475,
+   "updated_failures": 48,
+   "blind_ler": 0.475,
+   "projected_updated_20k": 960.0,
+   "time_p50_us": 10450.75
+  },
+  {
+   "code": "GB24 w=11 [[48, 4]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 8699224872086918392,
+   "blind_failures": 806,
+   "updated_failures": 312,
+   "blind_ler": 0.806,
+   "projected_updated_20k": 6240.0,
+   "time_p50_us": 14505.4501953125
+  },
+  {
+   "code": "GB24 w=11 [[48, 4]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 7592553996141494313,
+   "blind_failures": 894,
+   "updated_failures": 610,
+   "blind_ler": 0.894,
+   "projected_updated_20k": 12200.0,
+   "time_p50_us": 27529.55078125
+  },
+  {
+   "code": "GB24 w=12 [[48, 2]]",
+   "p": 0.001,
+   "shots": 1000,
+   "seed": 3082587323326612377,
+   "blind_failures": 206,
+   "updated_failures": 44,
+   "blind_ler": 0.206,
+   "projected_updated_20k": 880.0,
+   "time_p50_us": 9044.0
+  },
+  {
+   "code": "GB24 w=12 [[48, 2]]",
+   "p": 0.002,
+   "shots": 1000,
+   "seed": 6139346762220255409,
+   "blind_failures": 523,
+   "updated_failures": 268,
+   "blind_ler": 0.523,
+   "projected_updated_20k": 5360.0,
+   "time_p50_us": 18220.400390625
+  },
+  {
+   "code": "GB24 w=12 [[48, 2]]",
+   "p": 0.003,
+   "shots": 1000,
+   "seed": 2034357426236586240,
+   "blind_failures": 740,
+   "updated_failures": 527,
+   "blind_ler": 0.74,
+   "projected_updated_20k": 10540.0,
+   "time_p50_us": 41758.75
+  }
+ ],
+ "frozen_p": null,
+ "kind": "E09-pilot",
+ "experiment": "E09",
+ "run_id": "72ae45a7984046c287ceead0867eb958",
+ "status": "complete",
+ "started": "2026-10-29T21:25:23",
+ "updated": "2026-10-29T21:25:23",
+ "finished": "2026-10-29T21:25:23",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0",
+  "numba": "0.67.0",
+  "matplotlib": "3.11.2",
+  "pymatching": "2.4.0",
+  "relay-bp": null,
+  "psutil": "7.2.2"
+ },
+ "environment": {
+  "python": "3.12.13",
+  "implementation": "CPython",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "cpu_count": 16,
+  "numba": "numba 0.67.0",
+  "timing": {
+   "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "pinned": false,
+   "logical_cores": 16,
+   "physical_cores": 8,
+   "power_plan": "Power saver",
+   "cpu_mhz": 3401,
+   "cpu_max_mhz": 3401,
+   "on_battery": null,
+   "load_percent": 6.8,
+   "process_priority": "32"
+  }
+ },
+ "code": {
+  "file": "FlaggedDecoding.py",
+  "sha256": "84a1415a4b5cf00cdf3eadbc43e161177fea8c9639fc4201637c07b23d8a2a7f",
+  "git_commit": null,
+  "git_dirty": null
+ },
+ "stim_selfcheck": {
+  "digest": "942e75d1004e5106e4540189a60e59500691e08a49bbc29ee4e0220067e5b2d5",
+  "stim": "1.16.0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD"
+ }
+}

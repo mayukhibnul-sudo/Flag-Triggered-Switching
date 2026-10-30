@@ -1,0 +1,3 @@
+decoder,compared_with,failures,fixed_by_other,broken_by_other
+OSD-0,OSD-0-ps,1,1,0
+OSD-0-ps,OSD-0,0,0,1

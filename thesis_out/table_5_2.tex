@@ -1,0 +1,13 @@
+% Table 5.2 — reference policies
+\begin{tabular}{llllllllllllll}
+\hline
+policy & weak & strong & shots & escalation & failures & ler & ci\_low & ci\_high & cost\_mean\_us & cost\_median\_us & cost\_p99\_us & workers & cost\_convention \\
+\hline
+never & peel & OSD-0 & 20000 & 0 & 4069 & 0.2034 & 0.1979 & 0.2091 & 115.5 & 11.3 & 33.7 & 8 & weak time charged only when weak runs \\
+flag-only & peel & OSD-0 & 20000 & 0.6711 & 641 & 0.03205 & 0.0297 & 0.03458 & 1557 & 593.6 & 5303 & 8 & weak time charged only when weak runs \\
+flag>=1 & peel & OSD-0 & 20000 & 0.7114 & 44 & 0.0022 & 0.001639 & 0.002952 & 1594 & 606.1 & 5303 & 8 & weak time charged only when weak runs \\
+primary\_fail & peel & OSD-0 & 20000 & 0.2505 & 41 & 0.00205 & 0.001512 & 0.00278 & 814.7 & 12.5 & 5214 & 8 & weak time charged only when weak runs \\
+always & peel & OSD-0 & 20000 & 1 & 44 & 0.0022 & 0.001639 & 0.002952 & 1657 & 606.3 & 5297 & 8 & weak time charged only when weak runs \\
+oracle & peel & OSD-0 & 20000 & 0.2034 & 38 & 0.0019 & 0.001385 & 0.002607 & 701.2 & 12.2 & 5175 & 8 & weak time charged only when weak runs \\
+\hline
+\end{tabular}

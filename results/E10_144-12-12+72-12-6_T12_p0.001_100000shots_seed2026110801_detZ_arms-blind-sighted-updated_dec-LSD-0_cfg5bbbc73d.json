@@ -1,0 +1,490 @@
+{
+ "schema": 2,
+ "numbering": "FlaggedDecoding-v1",
+ "config": {
+  "codes": [
+   "[[144, 12, 12]]",
+   "[[72, 12, 6]]"
+  ],
+  "rounds_list": [
+   12
+  ],
+  "ps": [
+   0.001
+  ],
+  "shots_per_config": [
+   50000,
+   50000
+  ],
+  "master_seed": 2026110801,
+  "detector_convention": "z-only",
+  "x_detectors": false,
+  "idle_noise": false,
+  "decoders": {
+   "LSD-0": {
+    "kind": "lsd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "LSD_CS",
+    "order": 0
+   }
+  },
+  "workers": 1,
+  "scaled": false,
+  "configs": [
+   {
+    "code": "[[72, 12, 6]]",
+    "rounds": 12,
+    "p": 0.001,
+    "shots": 50000,
+    "decoder": "LSD-0",
+    "arms": [
+     "blind",
+     "sighted",
+     "updated"
+    ],
+    "purpose": "Holm T12",
+    "design_id": "B1",
+    "shard": 0,
+    "seed": 1857614567325396710,
+    "config_id": "72-12-6_T12_p0.001_s0_LSD-0"
+   },
+   {
+    "code": "[[144, 12, 12]]",
+    "rounds": 12,
+    "p": 0.001,
+    "shots": 50000,
+    "decoder": "LSD-0",
+    "arms": [
+     "blind",
+     "sighted",
+     "updated"
+    ],
+    "purpose": "descriptive",
+    "design_id": "B2",
+    "shard": 0,
+    "seed": 8252477738678029781,
+    "config_id": "144-12-12_T12_p0.001_s0_LSD-0"
+   }
+  ]
+ },
+ "timing": {
+  "workers_requested": 1,
+  "workers_effective": [
+   1
+  ],
+  "backends": [
+   "single-process loop, arms in turns per chunk (rotating order)"
+  ],
+  "resumed_chunks": 0,
+  "total_chunks": 1200
+ },
+ "samples": {
+  "72-12-6_T12_p0.001_s0_LSD-0": {
+   "flagged": "1355b141fa88f18a56395238125eb03fc35697081dca2111225c3f74b820eac6",
+   "unflagged": null
+  },
+  "144-12-12_T12_p0.001_s0_LSD-0": {
+   "flagged": "911fa0382894bfd357af4aedf85d1c658e537f5a04a259f201cee20e4350a9f3",
+   "unflagged": null
+  }
+ },
+ "results": [
+  {
+   "code": "[[72, 12, 6]]",
+   "rounds": 12,
+   "p": 0.001,
+   "shots": 50000,
+   "shard": 0,
+   "seed": 1857614567325396710,
+   "unflagged_seed": 150884214700264012,
+   "decoder": "LSD-0",
+   "decoder_spec": {
+    "kind": "lsd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "LSD_CS",
+    "order": 0
+   },
+   "x_detectors": false,
+   "detector_convention": "z-only",
+   "arms": {
+    "blind": {
+     "failures": 875,
+     "ler": 0.0175,
+     "ci_low": 0.016387154338223447,
+     "ci_high": 0.018686982845668446,
+     "time_p50_us": 4768.89990234375,
+     "time_p99_us": 9265.8193359375,
+     "time_mean_us": 4738.74609375,
+     "time_update_p50_us": 0.0,
+     "time_decode_p50_us": 4768.89990234375,
+     "bp_iters_mean": 26.87366,
+     "detectors": 468,
+     "faults": 5688,
+     "qubits_used": 180,
+     "qubit_index_span": 180,
+     "dem_sha256": "5ec9aedf825acc63d6e6edecb92291257e368f78fb69f21eb0e3936d54431bdf",
+     "circuit_sha256": "f2f1bfa35e6724c1e09c8f393cdda7563523542ece80582078bbefbf418a8fe9",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\72-12-6_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "resumed_chunks": 0,
+     "total_chunks": 200,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\72-12-6_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "timing_note": "",
+     "sample_sha256": "1355b141fa88f18a56395238125eb03fc35697081dca2111225c3f74b820eac6",
+     "seed": 1857614567325396710
+    },
+    "sighted": {
+     "failures": 254,
+     "ler": 0.00508,
+     "ci_low": 0.004493731413437103,
+     "ci_high": 0.00574231413071165,
+     "time_p50_us": 2750.85009765625,
+     "time_p99_us": 9495.3232421875,
+     "time_mean_us": 3577.970458984375,
+     "time_update_p50_us": 0.0,
+     "time_decode_p50_us": 2750.85009765625,
+     "bp_iters_mean": 16.57074,
+     "detectors": 900,
+     "faults": 5688,
+     "qubits_used": 180,
+     "qubit_index_span": 180,
+     "dem_sha256": "5ec9aedf825acc63d6e6edecb92291257e368f78fb69f21eb0e3936d54431bdf",
+     "circuit_sha256": "f2f1bfa35e6724c1e09c8f393cdda7563523542ece80582078bbefbf418a8fe9",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\72-12-6_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "resumed_chunks": 0,
+     "total_chunks": 200,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\72-12-6_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "timing_note": "",
+     "sample_sha256": "1355b141fa88f18a56395238125eb03fc35697081dca2111225c3f74b820eac6",
+     "seed": 1857614567325396710
+    },
+    "updated": {
+     "failures": 7,
+     "ler": 0.00014,
+     "ci_low": 6.781800868034618e-05,
+     "ci_high": 0.000288986577309703,
+     "time_p50_us": 1195.0,
+     "time_p99_us": 5919.45947265625,
+     "time_mean_us": 1471.1817626953125,
+     "time_update_p50_us": 361.79998779296875,
+     "time_decode_p50_us": 744.9500122070312,
+     "bp_iters_mean": 4.18346,
+     "detectors": 468,
+     "faults": 5688,
+     "qubits_used": 180,
+     "qubit_index_span": 180,
+     "dem_sha256": "5ec9aedf825acc63d6e6edecb92291257e368f78fb69f21eb0e3936d54431bdf",
+     "circuit_sha256": "f2f1bfa35e6724c1e09c8f393cdda7563523542ece80582078bbefbf418a8fe9",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\72-12-6_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "resumed_chunks": 0,
+     "total_chunks": 200,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\72-12-6_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "timing_note": "",
+     "sample_sha256": "1355b141fa88f18a56395238125eb03fc35697081dca2111225c3f74b820eac6",
+     "seed": 1857614567325396710
+    }
+   },
+   "paired": {
+    "blind|sighted": {
+     "a": "blind",
+     "b": "sighted",
+     "a_only": 711,
+     "b_only": 90,
+     "p": 1.3563626002988558e-120,
+     "ratio": 3.4448818897637796,
+     "paired": true,
+     "method": "exact McNemar (two-sided)"
+    },
+    "sighted|updated": {
+     "a": "sighted",
+     "b": "updated",
+     "a_only": 249,
+     "b_only": 2,
+     "p": 1.7480710585086208e-71,
+     "ratio": 36.285714285714285,
+     "paired": true,
+     "method": "exact McNemar (two-sided)"
+    },
+    "blind|updated": {
+     "a": "blind",
+     "b": "updated",
+     "a_only": 871,
+     "b_only": 3,
+     "p": 1.766849994395077e-255,
+     "ratio": 125.0,
+     "paired": true,
+     "method": "exact McNemar (two-sided)"
+    }
+   },
+   "unpaired": {},
+   "structure": {
+    "flag_rows": 432,
+    "faults_covered": 2592,
+    "group_sizes": [
+     6
+    ],
+    "max_flag_weight": 1,
+    "disjoint": true
+   },
+   "overhead": {
+    "detectors_flagged": 900,
+    "detectors_blind": 468,
+    "flag_detectors": 432,
+    "faults_flagged": 5688,
+    "qubits_flagged": 180,
+    "mean_flags_per_shot": 2.24522,
+    "flagged_fraction": 0.89456
+   },
+   "sample_sha256": "1355b141fa88f18a56395238125eb03fc35697081dca2111225c3f74b820eac6",
+   "timing_order": "interleaved: arms in turns per chunk",
+   "pairing": {
+    "blind|sighted": true,
+    "sighted|updated": true,
+    "blind|updated": true
+   },
+   "min_discordant_holm": 10,
+   "config_id": "72-12-6_T12_p0.001_s0_LSD-0",
+   "tag": null
+  },
+  {
+   "code": "[[144, 12, 12]]",
+   "rounds": 12,
+   "p": 0.001,
+   "shots": 50000,
+   "shard": 0,
+   "seed": 8252477738678029781,
+   "unflagged_seed": 4147278579613826204,
+   "decoder": "LSD-0",
+   "decoder_spec": {
+    "kind": "lsd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "LSD_CS",
+    "order": 0
+   },
+   "x_detectors": false,
+   "detector_convention": "z-only",
+   "arms": {
+    "blind": {
+     "failures": 104,
+     "ler": 0.00208,
+     "ci_low": 0.0017170934154941738,
+     "ci_high": 0.0025194130852383614,
+     "time_p50_us": 16477.30078125,
+     "time_p99_us": 28214.021484375,
+     "time_mean_us": 17335.28125,
+     "time_update_p50_us": 0.0,
+     "time_decode_p50_us": 16477.30078125,
+     "bp_iters_mean": 29.64852,
+     "detectors": 936,
+     "faults": 11376,
+     "qubits_used": 360,
+     "qubit_index_span": 360,
+     "dem_sha256": "cf19d21220c1377997259b6cff549b3cbbb6dae476f6ce294f5cd8696e5438d4",
+     "circuit_sha256": "b43cdaa591ebd0fdc494b914ef003f4c1a689b4217df92462ce6e5deef1abae6",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\144-12-12_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "resumed_chunks": 0,
+     "total_chunks": 200,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\144-12-12_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "timing_note": "",
+     "sample_sha256": "911fa0382894bfd357af4aedf85d1c658e537f5a04a259f201cee20e4350a9f3",
+     "seed": 8252477738678029781
+    },
+    "sighted": {
+     "failures": 9,
+     "ler": 0.00018,
+     "ci_low": 9.470318751348468e-05,
+     "ci_high": 0.00034209525238878077,
+     "time_p50_us": 11503.400390625,
+     "time_p99_us": 18848.30859375,
+     "time_mean_us": 9937.1708984375,
+     "time_update_p50_us": 0.0,
+     "time_decode_p50_us": 11503.400390625,
+     "bp_iters_mean": 23.50488,
+     "detectors": 1800,
+     "faults": 11376,
+     "qubits_used": 360,
+     "qubit_index_span": 360,
+     "dem_sha256": "cf19d21220c1377997259b6cff549b3cbbb6dae476f6ce294f5cd8696e5438d4",
+     "circuit_sha256": "b43cdaa591ebd0fdc494b914ef003f4c1a689b4217df92462ce6e5deef1abae6",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\144-12-12_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "resumed_chunks": 0,
+     "total_chunks": 200,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\144-12-12_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "timing_note": "",
+     "sample_sha256": "911fa0382894bfd357af4aedf85d1c658e537f5a04a259f201cee20e4350a9f3",
+     "seed": 8252477738678029781
+    },
+    "updated": {
+     "failures": 0,
+     "ler": 0.0,
+     "ci_low": 0.0,
+     "ci_high": 7.682609729729246e-05,
+     "time_p50_us": 5439.39990234375,
+     "time_p99_us": 30518.96875,
+     "time_mean_us": 7181.5791015625,
+     "time_update_p50_us": 783.0999755859375,
+     "time_decode_p50_us": 4462.39990234375,
+     "bp_iters_mean": 6.31882,
+     "detectors": 936,
+     "faults": 11376,
+     "qubits_used": 360,
+     "qubit_index_span": 360,
+     "dem_sha256": "cf19d21220c1377997259b6cff549b3cbbb6dae476f6ce294f5cd8696e5438d4",
+     "circuit_sha256": "b43cdaa591ebd0fdc494b914ef003f4c1a689b4217df92462ce6e5deef1abae6",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\144-12-12_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "resumed_chunks": 0,
+     "total_chunks": 200,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E10_144-12-12+72-12-6_T12_p0.001_100000shots_seed2026110801_detZ_arms-blind-sighted-updated_dec-LSD-0_cfg5bbbc73d\\144-12-12_T12_p0.001_s0_LSD-0\\interleaved_LSD-0",
+     "timing_note": "",
+     "sample_sha256": "911fa0382894bfd357af4aedf85d1c658e537f5a04a259f201cee20e4350a9f3",
+     "seed": 8252477738678029781
+    }
+   },
+   "paired": {
+    "blind|sighted": {
+     "a": "blind",
+     "b": "sighted",
+     "a_only": 101,
+     "b_only": 6,
+     "p": 2.3652503567112107e-23,
+     "ratio": 11.555555555555555,
+     "paired": true,
+     "method": "exact McNemar (two-sided)"
+    },
+    "sighted|updated": {
+     "a": "sighted",
+     "b": "updated",
+     "a_only": 9,
+     "b_only": 0,
+     "p": 0.00390625,
+     "ratio": Infinity,
+     "paired": true,
+     "method": "exact McNemar (two-sided)"
+    },
+    "blind|updated": {
+     "a": "blind",
+     "b": "updated",
+     "a_only": 104,
+     "b_only": 0,
+     "p": 9.860761315262648e-32,
+     "ratio": Infinity,
+     "paired": true,
+     "method": "exact McNemar (two-sided)"
+    }
+   },
+   "unpaired": {},
+   "structure": {
+    "flag_rows": 864,
+    "faults_covered": 5184,
+    "group_sizes": [
+     6
+    ],
+    "max_flag_weight": 1,
+    "disjoint": true
+   },
+   "overhead": {
+    "detectors_flagged": 1800,
+    "detectors_blind": 936,
+    "flag_detectors": 864,
+    "faults_flagged": 11376,
+    "qubits_flagged": 360,
+    "mean_flags_per_shot": 4.45892,
+    "flagged_fraction": 0.9883
+   },
+   "sample_sha256": "911fa0382894bfd357af4aedf85d1c658e537f5a04a259f201cee20e4350a9f3",
+   "timing_order": "interleaved: arms in turns per chunk",
+   "pairing": {
+    "blind|sighted": true,
+    "sighted|updated": true,
+    "blind|updated": true
+   },
+   "min_discordant_holm": 10,
+   "config_id": "144-12-12_T12_p0.001_s0_LSD-0",
+   "tag": null
+  }
+ ],
+ "kind": "E10-lsd",
+ "experiment": "E10",
+ "run_id": "f188aa1297a1403cb94101ff22ad7949",
+ "status": "complete",
+ "started": "2026-10-30T01:13:18",
+ "updated": "2026-10-30T01:50:38",
+ "finished": "2026-10-30T01:50:38",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0",
+  "numba": "0.67.0",
+  "matplotlib": "3.11.2",
+  "pymatching": "2.4.0",
+  "relay-bp": null,
+  "psutil": "7.2.2"
+ },
+ "environment": {
+  "python": "3.12.13",
+  "implementation": "CPython",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "cpu_count": 16,
+  "numba": "numba 0.67.0",
+  "timing": {
+   "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "pinned": false,
+   "logical_cores": 16,
+   "physical_cores": 8,
+   "power_plan": "Power saver",
+   "cpu_mhz": 3401,
+   "cpu_max_mhz": 3401,
+   "on_battery": null,
+   "load_percent": 14.6,
+   "process_priority": "32"
+  }
+ },
+ "code": {
+  "file": "FlaggedDecoding.py",
+  "sha256": "4f290232cf460d7e95183886f823218a93c5edaeab50e2a723e5c93d15d09745",
+  "git_commit": null,
+  "git_dirty": null
+ },
+ "stim_selfcheck": {
+  "digest": "942e75d1004e5106e4540189a60e59500691e08a49bbc29ee4e0220067e5b2d5",
+  "stim": "1.16.0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD"
+ },
+ "checkpoint_cleared": true
+}

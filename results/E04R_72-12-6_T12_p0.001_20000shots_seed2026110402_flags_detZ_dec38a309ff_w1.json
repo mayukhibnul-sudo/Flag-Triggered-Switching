@@ -1,0 +1,268 @@
+{
+ "schema": 2,
+ "numbering": "FlaggedDecoding-v1",
+ "config": {
+  "code": "[[72, 12, 6]]",
+  "rounds": 12,
+  "p": 0.001,
+  "shots": 20000,
+  "seed": 2026110402,
+  "use_flags": true,
+  "x_detectors": false,
+  "detector_convention": "z-only",
+  "weak": [
+   "peel",
+   "BP-ms-10",
+   "BP-ms-30",
+   "BP-ps-30",
+   "peel-naive",
+   "peel-single",
+   "BP-ms-5",
+   "BP-ms-100",
+   "control-flagged-20%",
+   "control-flagged-50%",
+   "control-any-20%"
+  ],
+  "strong": [
+   "OSD-0",
+   "OSD-CS2",
+   "OSD-CS4",
+   "OSD-CS7",
+   "LSD-0",
+   "LSD-CS2",
+   "LSD-CS4",
+   "relay"
+  ],
+  "decoders": {
+   "peel": {
+    "kind": "peel",
+    "dominance": true,
+    "requeue": true,
+    "implementation": "numba"
+   },
+   "BP-ms-10": {
+    "kind": "bp",
+    "bp_method": "ms",
+    "max_iter": 10,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625
+   },
+   "BP-ms-30": {
+    "kind": "bp",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625
+   },
+   "BP-ps-30": {
+    "kind": "bp",
+    "bp_method": "ps",
+    "max_iter": 30,
+    "schedule": "parallel"
+   },
+   "peel-naive": {
+    "kind": "peel",
+    "dominance": false,
+    "requeue": true,
+    "implementation": "numba"
+   },
+   "peel-single": {
+    "kind": "peel",
+    "dominance": false,
+    "requeue": false,
+    "implementation": "numba"
+   },
+   "BP-ms-5": {
+    "kind": "bp",
+    "bp_method": "ms",
+    "max_iter": 5,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625
+   },
+   "BP-ms-100": {
+    "kind": "bp",
+    "bp_method": "ms",
+    "max_iter": 100,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625
+   },
+   "control-flagged-20%": {
+    "kind": "control",
+    "rate": 0.2,
+    "flagged_only": true
+   },
+   "control-flagged-50%": {
+    "kind": "control",
+    "rate": 0.5,
+    "flagged_only": true
+   },
+   "control-any-20%": {
+    "kind": "control",
+    "rate": 0.2,
+    "flagged_only": false
+   },
+   "OSD-0": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 0
+   },
+   "OSD-CS2": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 2
+   },
+   "OSD-CS4": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 4
+   },
+   "OSD-CS7": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 7
+   },
+   "LSD-0": {
+    "kind": "lsd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "LSD_CS",
+    "order": 0
+   },
+   "LSD-CS2": {
+    "kind": "lsd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "LSD_CS",
+    "order": 2
+   },
+   "LSD-CS4": {
+    "kind": "lsd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "LSD_CS",
+    "order": 4
+   },
+   "relay": {
+    "kind": "relay",
+    "gamma0": 0.65,
+    "pre_iter": 80,
+    "num_sets": 100,
+    "set_max_iter": 60,
+    "gamma_dist_interval": [
+     -0.24,
+     0.66
+    ],
+    "stop_nconv": 5,
+    "seed": 0,
+    "backend": "native"
+   }
+  }
+ },
+ "timing": {
+  "workers_requested": 1,
+  "workers_effective": 1,
+  "backends": [
+   "sequential"
+  ],
+  "resumed_chunks": 0,
+  "total_chunks": 80,
+  "warmup": "one untimed decode per chunk and decoder"
+ },
+ "samples": {
+  "grid": "10543cfd87acdf1c2174d96357eb2662611fc2d244a5a72d85da1f414d696332"
+ },
+ "data_file": "E04R_72-12-6_T12_p0.001_20000shots_seed2026110402_flags_detZ_dec38a309ff_w1.npz",
+ "data_sha256": "0d15a21e5af2eb5c89bbd7813ad1102a77e2dc3a5071b2994d524fc26a0402dc",
+ "kind": "E04-retime",
+ "experiment": "E04",
+ "run_id": "9e4ecc514cd14b50afc645feec173d0e",
+ "status": "complete",
+ "started": "2026-10-29T12:07:09",
+ "updated": "2026-10-29T13:24:18",
+ "finished": "2026-10-29T13:24:18",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0",
+  "numba": "0.67.0",
+  "matplotlib": "3.11.2",
+  "pymatching": "2.4.0",
+  "relay-bp": null,
+  "psutil": "7.2.2"
+ },
+ "environment": {
+  "python": "3.12.13",
+  "implementation": "CPython",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "cpu_count": 16,
+  "numba": "numba 0.67.0",
+  "timing": {
+   "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "pinned": false,
+   "logical_cores": 16,
+   "physical_cores": 8,
+   "power_plan": "Power saver",
+   "cpu_mhz": 3401,
+   "cpu_max_mhz": 3401,
+   "on_battery": null,
+   "load_percent": 1.4,
+   "process_priority": "32"
+  }
+ },
+ "code": {
+  "file": "FlaggedDecoding.py",
+  "sha256": "5c623b1e46915b7e197047c21a53f69c01673a99b56d188f172e449f259e7e20",
+  "git_commit": null,
+  "git_dirty": null
+ },
+ "stim_selfcheck": {
+  "digest": "942e75d1004e5106e4540189a60e59500691e08a49bbc29ee4e0220067e5b2d5",
+  "stim": "1.16.0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD"
+ },
+ "checkpoint_cleared": true
+}

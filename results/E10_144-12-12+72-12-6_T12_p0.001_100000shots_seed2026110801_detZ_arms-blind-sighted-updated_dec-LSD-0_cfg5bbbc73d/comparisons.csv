@@ -1,0 +1,7 @@
+code,rounds,p,shots,decoder,comparison,paired,a_only,b_only,ratio,lo,hi,p_value,method
+"[[72, 12, 6]]",12,0.001,50000,LSD-0,blind|sighted,True,711,90,3.4448818897637796,,,1.3563626002988558e-120,exact McNemar (two-sided)
+"[[72, 12, 6]]",12,0.001,50000,LSD-0,sighted|updated,True,249,2,36.285714285714285,,,1.7480710585086208e-71,exact McNemar (two-sided)
+"[[72, 12, 6]]",12,0.001,50000,LSD-0,blind|updated,True,871,3,125.0,,,1.766849994395077e-255,exact McNemar (two-sided)
+"[[144, 12, 12]]",12,0.001,50000,LSD-0,blind|sighted,True,101,6,11.555555555555555,,,2.3652503567112107e-23,exact McNemar (two-sided)
+"[[144, 12, 12]]",12,0.001,50000,LSD-0,sighted|updated,True,9,0,inf,,,0.00390625,exact McNemar (two-sided)
+"[[144, 12, 12]]",12,0.001,50000,LSD-0,blind|updated,True,104,0,inf,,,9.860761315262648e-32,exact McNemar (two-sided)

@@ -1,0 +1,154 @@
+{
+ "schema": 2,
+ "numbering": "FlaggedDecoding-v1",
+ "config": {
+  "code": "[[144, 12, 12]]",
+  "rounds": 12,
+  "p": 0.001,
+  "shots": 20000,
+  "seed": 2026110402,
+  "use_flags": true,
+  "x_detectors": false,
+  "detector_convention": "z-only",
+  "weak": [
+   "peel",
+   "BP-ms-10",
+   "BP-ms-30",
+   "BP-ps-30"
+  ],
+  "strong": [
+   "OSD-0",
+   "OSD-0-ps"
+  ],
+  "decoders": {
+   "peel": {
+    "kind": "peel",
+    "dominance": true,
+    "requeue": true,
+    "implementation": "numba"
+   },
+   "BP-ms-10": {
+    "kind": "bp",
+    "bp_method": "ms",
+    "max_iter": 10,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625
+   },
+   "BP-ms-30": {
+    "kind": "bp",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625
+   },
+   "BP-ps-30": {
+    "kind": "bp",
+    "bp_method": "ps",
+    "max_iter": 30,
+    "schedule": "parallel"
+   },
+   "OSD-0": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 0
+   },
+   "OSD-0-ps": {
+    "kind": "osd",
+    "bp_method": "ps",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "method": "osd_cs",
+    "order": 0
+   }
+  }
+ },
+ "timing": {
+  "workers_requested": 1,
+  "workers_effective": 1,
+  "backends": [
+   "sequential"
+  ],
+  "resumed_chunks": 0,
+  "total_chunks": 80,
+  "warmup": "one untimed decode per chunk and decoder"
+ },
+ "samples": {
+  "grid": "4e033caf80b502c9f2f75c59d8430742b014b883cc4143b6a2ecfcd813a6a1e3"
+ },
+ "data_file": "E04_144-12-12_T12_p0.001_20000shots_seed2026110402_flags_detZ_dec0d782fa0_w1.npz",
+ "data_sha256": "8b3cc0cbf08a90c8b6c11d9559bcc280435e533eda0c9bf440fb930a281c0345",
+ "kind": "E04-grid",
+ "experiment": "E04",
+ "run_id": "057eed2ff8a642b499ef7beb0ec9298a",
+ "status": "complete",
+ "started": "2026-10-29T22:43:24",
+ "updated": "2026-10-29T23:05:14",
+ "finished": "2026-10-29T23:05:14",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0",
+  "numba": "0.67.0",
+  "matplotlib": "3.11.2",
+  "pymatching": "2.4.0",
+  "relay-bp": null,
+  "psutil": "7.2.2"
+ },
+ "environment": {
+  "python": "3.12.13",
+  "implementation": "CPython",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "cpu_count": 16,
+  "numba": "numba 0.67.0",
+  "timing": {
+   "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "pinned": false,
+   "logical_cores": 16,
+   "physical_cores": 8,
+   "power_plan": "Power saver",
+   "cpu_mhz": 3401,
+   "cpu_max_mhz": 3401,
+   "on_battery": null,
+   "load_percent": 10.1,
+   "process_priority": "32"
+  }
+ },
+ "code": {
+  "file": "FlaggedDecoding.py",
+  "sha256": "4f290232cf460d7e95183886f823218a93c5edaeab50e2a723e5c93d15d09745",
+  "git_commit": null,
+  "git_dirty": null
+ },
+ "stim_selfcheck": {
+  "digest": "942e75d1004e5106e4540189a60e59500691e08a49bbc29ee4e0220067e5b2d5",
+  "stim": "1.16.0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD"
+ },
+ "checkpoint_cleared": true
+}

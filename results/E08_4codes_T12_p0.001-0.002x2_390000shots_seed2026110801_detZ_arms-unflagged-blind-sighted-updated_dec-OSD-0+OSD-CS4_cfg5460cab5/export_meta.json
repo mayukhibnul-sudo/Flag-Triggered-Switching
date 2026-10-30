@@ -1,0 +1,10 @@
+{
+ "data_file": "E08_4codes_T12_p0.001-0.002x2_390000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-0+OSD-CS4_cfg5460cab5.json",
+ "data_sha256": "be49882edbbed166b11dd10064f5a1c8a6ebdbc20a6e4f37ecaa6244cf2129a5",
+ "run_started": "2026-10-29T17:37:03",
+ "run_status": "complete",
+ "run_id": "fe49867db72640f98b39db27da6aca76",
+ "exported": "2026-10-29T20:59:50",
+ "code_sha256": "5c623b1e46915b7e197047c21a53f69c01673a99b56d188f172e449f259e7e20",
+ "export_type": "fresh run"
+}

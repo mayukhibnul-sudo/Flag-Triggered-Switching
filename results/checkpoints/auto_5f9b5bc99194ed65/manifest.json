@@ -1,0 +1,15 @@
+{
+ "format": 2,
+ "fingerprint": "5f9b5bc99194ed652546887ac290356e480e2fb5",
+ "label": "Exp 9 prior updating: [[288, 12, 18]], T=12, p=0.001, 250,000 shots, seed 20260930, OSD-0",
+ "names": [
+  "run"
+ ],
+ "shots": 250000,
+ "chunk_size": 250,
+ "n_chunks": 1000,
+ "created": "2026-10-27 17:26:57",
+ "updated": "2026-10-27 21:25:43",
+ "complete": true,
+ "done": 1000
+}

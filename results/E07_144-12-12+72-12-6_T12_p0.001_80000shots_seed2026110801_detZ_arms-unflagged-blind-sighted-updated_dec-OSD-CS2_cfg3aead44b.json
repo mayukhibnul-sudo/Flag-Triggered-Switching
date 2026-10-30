@@ -1,0 +1,480 @@
+{
+ "schema": 2,
+ "numbering": "FlaggedDecoding-v1",
+ "config": {
+  "codes": [
+   "[[144, 12, 12]]",
+   "[[72, 12, 6]]"
+  ],
+  "rounds_list": [
+   12
+  ],
+  "ps": [
+   0.001
+  ],
+  "shots_per_config": [
+   50000,
+   10000,
+   20000
+  ],
+  "master_seed": 2026110801,
+  "detector_convention": "z-only",
+  "x_detectors": false,
+  "idle_noise": false,
+  "decoders": {
+   "OSD-CS2": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 2
+   }
+  },
+  "workers": 1,
+  "scaled": false,
+  "configs": [
+   {
+    "code": "[[72, 12, 6]]",
+    "rounds": 12,
+    "p": 0.001,
+    "shots": 50000,
+    "decoder": "OSD-CS2",
+    "arms": [
+     "unflagged",
+     "updated"
+    ],
+    "purpose": "frontier, [[72,12,6]]",
+    "design_id": "F1",
+    "shard": 0,
+    "seed": 1857614567325396710,
+    "config_id": "72-12-6_T12_p0.001_s0_OSD-CS2"
+   },
+   {
+    "code": "[[72, 12, 6]]",
+    "rounds": 12,
+    "p": 0.001,
+    "shots": 10000,
+    "decoder": "OSD-CS2",
+    "arms": [
+     "blind",
+     "sighted"
+    ],
+    "purpose": "frontier p99, [[72,12,6]]",
+    "design_id": "F2",
+    "shard": 0,
+    "seed": 1857614567325396710,
+    "config_id": "72-12-6_T12_p0.001_s0_OSD-CS2"
+   },
+   {
+    "code": "[[144, 12, 12]]",
+    "rounds": 12,
+    "p": 0.001,
+    "shots": 20000,
+    "decoder": "OSD-CS2",
+    "arms": [
+     "unflagged"
+    ],
+    "purpose": "frontier, [[144,12,12]]",
+    "design_id": "F3",
+    "shard": 0,
+    "seed": 8252477738678029781,
+    "config_id": "144-12-12_T12_p0.001_s0_OSD-CS2"
+   }
+  ]
+ },
+ "timing": {
+  "workers_requested": 1,
+  "workers_effective": [
+   1
+  ],
+  "backends": [
+   "sequential",
+   "single-process loop, arms in turns per chunk (rotating order)"
+  ],
+  "resumed_chunks": 0,
+  "total_chunks": 560
+ },
+ "samples": {
+  "72-12-6_T12_p0.001_s0_OSD-CS2": {
+   "flagged": "5b6fe46e1770e77f564ce70fcf1c251be0d1614ef637b2d446073ded2de31ad7",
+   "unflagged": null
+  },
+  "144-12-12_T12_p0.001_s0_OSD-CS2": {
+   "flagged": null,
+   "unflagged": "bde0ecf7d2ecfc8d406f7d9a3a7820d631ec2e05ff281cb6ed06b5e23cbb235a"
+  }
+ },
+ "results": [
+  {
+   "code": "[[72, 12, 6]]",
+   "rounds": 12,
+   "p": 0.001,
+   "shots": 50000,
+   "shard": 0,
+   "seed": 1857614567325396710,
+   "unflagged_seed": 150884214700264012,
+   "decoder": "OSD-CS2",
+   "decoder_spec": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 2
+   },
+   "x_detectors": false,
+   "detector_convention": "z-only",
+   "arms": {
+    "unflagged": {
+     "failures": 180,
+     "ler": 0.0036,
+     "ci_low": 0.0031117975394563593,
+     "ci_high": 0.004164475409940392,
+     "time_p50_us": 1146.199951171875,
+     "time_p99_us": 106372.4453125,
+     "time_mean_us": 21514.060546875,
+     "time_update_p50_us": 0.0,
+     "time_decode_p50_us": 1146.199951171875,
+     "bp_iters_mean": 11.51868,
+     "detectors": 468,
+     "faults": 4392,
+     "qubits_used": 144,
+     "qubit_index_span": 144,
+     "dem_sha256": "4a7bed7721b9ddd6eb46f5f6cad843f1eac38f29eb8e821f0379b76efeeba1c8",
+     "circuit_sha256": "dd07c7903cab9542fb94b2eefa30bad705e38b2c34d1009c03a7ad7d0f1b1cda",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\72-12-6_T12_p0.001_s0_OSD-CS2\\interleaved_OSD-CS2",
+     "resumed_chunks": 0,
+     "total_chunks": 200,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\72-12-6_T12_p0.001_s0_OSD-CS2\\interleaved_OSD-CS2",
+     "timing_note": "",
+     "sample_sha256": "d763198485aa2e1af9754fa97a0c1679b6e8ab4b2cfd0daa6f3135883bc21c72",
+     "seed": 150884214700264012
+    },
+    "updated": {
+     "failures": 7,
+     "ler": 0.00014,
+     "ci_low": 6.781800868034618e-05,
+     "ci_high": 0.000288986577309703,
+     "time_p50_us": 1232.0,
+     "time_p99_us": 133512.53125,
+     "time_mean_us": 5704.60400390625,
+     "time_update_p50_us": 365.20001220703125,
+     "time_decode_p50_us": 757.0999755859375,
+     "bp_iters_mean": 4.2,
+     "detectors": 468,
+     "faults": 5688,
+     "qubits_used": 180,
+     "qubit_index_span": 180,
+     "dem_sha256": "5ec9aedf825acc63d6e6edecb92291257e368f78fb69f21eb0e3936d54431bdf",
+     "circuit_sha256": "f2f1bfa35e6724c1e09c8f393cdda7563523542ece80582078bbefbf418a8fe9",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\72-12-6_T12_p0.001_s0_OSD-CS2\\interleaved_OSD-CS2",
+     "resumed_chunks": 0,
+     "total_chunks": 200,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\72-12-6_T12_p0.001_s0_OSD-CS2\\interleaved_OSD-CS2",
+     "timing_note": "",
+     "sample_sha256": "1355b141fa88f18a56395238125eb03fc35697081dca2111225c3f74b820eac6",
+     "seed": 1857614567325396710
+    }
+   },
+   "paired": {},
+   "unpaired": {
+    "updated|unflagged": {
+     "k1": 7,
+     "n1": 50000,
+     "k0": 180,
+     "n0": 50000,
+     "paired": false,
+     "alpha": 0.05,
+     "method": "exact conditional (Clopper-Pearson on k1 | k1+k0)",
+     "ratio": 0.03888888888888889,
+     "lo": 0.015414265916417206,
+     "hi": 0.08178627952833713,
+     "p": 1.5016279239463608e-44,
+     "a": "updated",
+     "b": "unflagged"
+    }
+   },
+   "structure": {
+    "flag_rows": 432,
+    "faults_covered": 2592,
+    "group_sizes": [
+     6
+    ],
+    "max_flag_weight": 1,
+    "disjoint": true
+   },
+   "overhead": {
+    "detectors_flagged": 900,
+    "detectors_blind": 468,
+    "flag_detectors": 432,
+    "faults_flagged": 5688,
+    "qubits_flagged": 180,
+    "mean_flags_per_shot": 2.24522,
+    "flagged_fraction": 0.89456,
+    "detectors_unflagged": 468,
+    "faults_unflagged": 4392,
+    "qubits_unflagged": 144
+   },
+   "sample_sha256": "1355b141fa88f18a56395238125eb03fc35697081dca2111225c3f74b820eac6",
+   "timing_order": "interleaved: arms in turns per chunk",
+   "pairing": {
+    "updated|unflagged": false
+   },
+   "mde_unpaired_ratio_at_observed_baseline": 1.3800988890049077,
+   "min_discordant_holm": 10,
+   "config_id": "72-12-6_T12_p0.001_s0_OSD-CS2",
+   "tag": null
+  },
+  {
+   "code": "[[72, 12, 6]]",
+   "rounds": 12,
+   "p": 0.001,
+   "shots": 10000,
+   "shard": 0,
+   "seed": 1857614567325396710,
+   "unflagged_seed": 150884214700264012,
+   "decoder": "OSD-CS2",
+   "decoder_spec": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 2
+   },
+   "x_detectors": false,
+   "detector_convention": "z-only",
+   "arms": {
+    "blind": {
+     "failures": 67,
+     "ler": 0.0067,
+     "ci_low": 0.005279610297613358,
+     "ci_high": 0.008499256412951111,
+     "time_p50_us": 124609.25,
+     "time_p99_us": 207044.65625,
+     "time_mean_us": 114558.875,
+     "time_update_p50_us": 0.0,
+     "time_decode_p50_us": 124609.25,
+     "bp_iters_mean": 26.9736,
+     "detectors": 468,
+     "faults": 5688,
+     "qubits_used": 180,
+     "qubit_index_span": 180,
+     "dem_sha256": "5ec9aedf825acc63d6e6edecb92291257e368f78fb69f21eb0e3936d54431bdf",
+     "circuit_sha256": "f2f1bfa35e6724c1e09c8f393cdda7563523542ece80582078bbefbf418a8fe9",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\72-12-6_T12_p0.001_s0_OSD-CS2\\interleaved_OSD-CS2",
+     "resumed_chunks": 0,
+     "total_chunks": 40,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\72-12-6_T12_p0.001_s0_OSD-CS2\\interleaved_OSD-CS2",
+     "timing_note": "",
+     "sample_sha256": "5b6fe46e1770e77f564ce70fcf1c251be0d1614ef637b2d446073ded2de31ad7",
+     "seed": 1857614567325396710
+    },
+    "sighted": {
+     "failures": 10,
+     "ler": 0.001,
+     "ci_low": 0.0005432800768105723,
+     "ci_high": 0.0018399643760004356,
+     "time_p50_us": 3562.949951171875,
+     "time_p99_us": 188020.703125,
+     "time_mean_us": 66982.453125,
+     "time_update_p50_us": 0.0,
+     "time_decode_p50_us": 3562.949951171875,
+     "bp_iters_mean": 16.6755,
+     "detectors": 900,
+     "faults": 5688,
+     "qubits_used": 180,
+     "qubit_index_span": 180,
+     "dem_sha256": "5ec9aedf825acc63d6e6edecb92291257e368f78fb69f21eb0e3936d54431bdf",
+     "circuit_sha256": "f2f1bfa35e6724c1e09c8f393cdda7563523542ece80582078bbefbf418a8fe9",
+     "workers_effective": 1,
+     "backend": "single-process loop, arms in turns per chunk (rotating order); checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\72-12-6_T12_p0.001_s0_OSD-CS2\\interleaved_OSD-CS2",
+     "resumed_chunks": 0,
+     "total_chunks": 40,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\72-12-6_T12_p0.001_s0_OSD-CS2\\interleaved_OSD-CS2",
+     "timing_note": "",
+     "sample_sha256": "5b6fe46e1770e77f564ce70fcf1c251be0d1614ef637b2d446073ded2de31ad7",
+     "seed": 1857614567325396710
+    }
+   },
+   "paired": {
+    "blind|sighted": {
+     "a": "blind",
+     "b": "sighted",
+     "a_only": 61,
+     "b_only": 4,
+     "p": 3.918664438079533e-14,
+     "ratio": 6.7,
+     "paired": true,
+     "method": "exact McNemar (two-sided)"
+    }
+   },
+   "unpaired": {},
+   "structure": {
+    "flag_rows": 432,
+    "faults_covered": 2592,
+    "group_sizes": [
+     6
+    ],
+    "max_flag_weight": 1,
+    "disjoint": true
+   },
+   "overhead": {
+    "detectors_flagged": 900,
+    "detectors_blind": 468,
+    "flag_detectors": 432,
+    "faults_flagged": 5688,
+    "qubits_flagged": 180,
+    "mean_flags_per_shot": 2.2498,
+    "flagged_fraction": 0.8913
+   },
+   "sample_sha256": "5b6fe46e1770e77f564ce70fcf1c251be0d1614ef637b2d446073ded2de31ad7",
+   "timing_order": "interleaved: arms in turns per chunk",
+   "pairing": {
+    "blind|sighted": true
+   },
+   "min_discordant_holm": 10,
+   "config_id": "72-12-6_T12_p0.001_s0_OSD-CS2",
+   "tag": null
+  },
+  {
+   "code": "[[144, 12, 12]]",
+   "rounds": 12,
+   "p": 0.001,
+   "shots": 20000,
+   "shard": 0,
+   "seed": 8252477738678029781,
+   "unflagged_seed": 4147278579613826204,
+   "decoder": "OSD-CS2",
+   "decoder_spec": {
+    "kind": "osd",
+    "bp_method": "ms",
+    "max_iter": 30,
+    "schedule": "parallel",
+    "ms_scaling_factor": 0.625,
+    "method": "osd_cs",
+    "order": 2
+   },
+   "x_detectors": false,
+   "detector_convention": "z-only",
+   "arms": {
+    "unflagged": {
+     "failures": 4,
+     "ler": 0.0002,
+     "ci_low": 7.777749831242644e-05,
+     "ci_high": 0.000514188796801608,
+     "time_p50_us": 5982.25,
+     "time_p99_us": 533410.4375,
+     "time_mean_us": 182145.8125,
+     "time_update_p50_us": 0.0,
+     "time_decode_p50_us": 5982.25,
+     "bp_iters_mean": 17.84125,
+     "detectors": 936,
+     "faults": 8784,
+     "qubits_used": 288,
+     "qubit_index_span": 288,
+     "dem_sha256": "b591a040b1c0bd1230189eec5e4d9f758d5736c17f29cc5fb28adb64f895acea",
+     "circuit_sha256": "5a5784f14b7a3b5fc5827c803b39676675eb1bdf52dd59a08da6478f0b9e4a8c",
+     "workers_effective": 1,
+     "backend": "sequential; checkpoint C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\144-12-12_T12_p0.001_s0_OSD-CS2\\unflagged_OSD-CS2",
+     "resumed_chunks": 0,
+     "total_chunks": 80,
+     "checkpoint_dir": "C:\\Users\\user\\Desktop\\Thesis\\Flag-Triggered-Switching\\results\\checkpoints\\E07_144-12-12+72-12-6_T12_p0.001_80000shots_seed2026110801_detZ_arms-unflagged-blind-sighted-updated_dec-OSD-CS2_cfg3aead44b\\144-12-12_T12_p0.001_s0_OSD-CS2\\unflagged_OSD-CS2",
+     "timing_note": "",
+     "sample_sha256": "bde0ecf7d2ecfc8d406f7d9a3a7820d631ec2e05ff281cb6ed06b5e23cbb235a",
+     "seed": 4147278579613826204
+    }
+   },
+   "paired": {},
+   "unpaired": {},
+   "overhead": {
+    "detectors_unflagged": 936,
+    "faults_unflagged": 8784,
+    "qubits_unflagged": 288
+   },
+   "timing_order": "single arm",
+   "pairing": {},
+   "mde_unpaired_ratio_at_observed_baseline": Infinity,
+   "min_discordant_holm": 10,
+   "config_id": "144-12-12_T12_p0.001_s0_OSD-CS2",
+   "tag": null
+  }
+ ],
+ "kind": "E07-frontier",
+ "experiment": "E07",
+ "run_id": "c8b08327d20b4dca8e29a83dc75dc693",
+ "status": "complete",
+ "started": "2026-10-29T15:35:37",
+ "updated": "2026-10-29T17:30:13",
+ "finished": "2026-10-29T17:30:13",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0",
+  "numba": "0.67.0",
+  "matplotlib": "3.11.2",
+  "pymatching": "2.4.0",
+  "relay-bp": null,
+  "psutil": "7.2.2"
+ },
+ "environment": {
+  "python": "3.12.13",
+  "implementation": "CPython",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "cpu_count": 16,
+  "numba": "numba 0.67.0",
+  "timing": {
+   "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "pinned": false,
+   "logical_cores": 16,
+   "physical_cores": 8,
+   "power_plan": "Power saver",
+   "cpu_mhz": 3401,
+   "cpu_max_mhz": 3401,
+   "on_battery": null,
+   "load_percent": 13.9,
+   "process_priority": "32"
+  }
+ },
+ "code": {
+  "file": "FlaggedDecoding.py",
+  "sha256": "5c623b1e46915b7e197047c21a53f69c01673a99b56d188f172e449f259e7e20",
+  "git_commit": null,
+  "git_dirty": null
+ },
+ "stim_selfcheck": {
+  "digest": "942e75d1004e5106e4540189a60e59500691e08a49bbc29ee4e0220067e5b2d5",
+  "stim": "1.16.0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD"
+ },
+ "checkpoint_cleared": true
+}

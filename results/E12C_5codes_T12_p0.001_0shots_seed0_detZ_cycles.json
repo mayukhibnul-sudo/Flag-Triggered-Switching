@@ -1,0 +1,210 @@
+{
+ "schema": 2,
+ "numbering": "FlaggedDecoding-v1",
+ "config": {
+  "codes": [
+   "[[72, 12, 6]]",
+   "[[144, 12, 12]]",
+   "[[288, 12, 18]]",
+   "[[46, 2, 9]]",
+   "[[48, 6, 8]]"
+  ],
+  "rounds": 12,
+  "p": 0.001,
+  "shots": 0,
+  "seed": 0,
+  "detector_convention": "z-only",
+  "decoders": {}
+ },
+ "timing": {
+  "workers_requested": 1,
+  "workers_effective": 1,
+  "backends": [
+   "none"
+  ],
+  "resumed_chunks": 0,
+  "total_chunks": 0
+ },
+ "samples": {},
+ "rows": [
+  {
+   "code": "[[72, 12, 6]]",
+   "rounds": 12,
+   "p": 0.001,
+   "flag_rows": 432,
+   "blind": {
+    "rows": 468,
+    "cols": 5688,
+    "cycles4": 109188,
+    "cycles6": 7473744,
+    "girth": 4
+   },
+   "sighted": {
+    "rows": 900,
+    "cols": 5688,
+    "cycles4": 123444,
+    "cycles6": 8031420,
+    "girth": 4
+   },
+   "flag_cycles4": 14256,
+   "flag_cycles6": 557676
+  },
+  {
+   "code": "[[144, 12, 12]]",
+   "rounds": 12,
+   "p": 0.001,
+   "flag_rows": 864,
+   "blind": {
+    "rows": 936,
+    "cols": 11376,
+    "cycles4": 201960,
+    "cycles6": 9805320,
+    "girth": 4
+   },
+   "sighted": {
+    "rows": 1800,
+    "cols": 11376,
+    "cycles4": 230472,
+    "cycles6": 10785024,
+    "girth": 4
+   },
+   "flag_cycles4": 28512,
+   "flag_cycles6": 979704
+  },
+  {
+   "code": "[[288, 12, 18]]",
+   "rounds": 12,
+   "p": 0.001,
+   "flag_rows": 1728,
+   "blind": {
+    "rows": 1872,
+    "cols": 22752,
+    "cycles4": 384912,
+    "cycles6": 13782384,
+    "girth": 4
+   },
+   "sighted": {
+    "rows": 3600,
+    "cols": 22752,
+    "cycles4": 441936,
+    "cycles6": 15600096,
+    "girth": 4
+   },
+   "flag_cycles4": 57024,
+   "flag_cycles6": 1817712
+  },
+  {
+   "code": "[[46, 2, 9]]",
+   "rounds": 12,
+   "p": 0.001,
+   "flag_rows": 276,
+   "blind": {
+    "rows": 299,
+    "cols": 5842,
+    "cycles4": 1693030,
+    "cycles6": 796822902,
+    "girth": 4
+   },
+   "sighted": {
+    "rows": 575,
+    "cols": 5842,
+    "cycles4": 1735258,
+    "cycles6": 818335975,
+    "girth": 4
+   },
+   "flag_cycles4": 42228,
+   "flag_cycles6": 21513073
+  },
+  {
+   "code": "[[48, 6, 8]]",
+   "rounds": 12,
+   "p": 0.001,
+   "flag_rows": 288,
+   "blind": {
+    "rows": 312,
+    "cols": 4944,
+    "cycles4": 602148,
+    "cycles6": 157025264,
+    "girth": 4
+   },
+   "sighted": {
+    "rows": 600,
+    "cols": 4944,
+    "cycles4": 628356,
+    "cycles6": 162519872,
+    "girth": 4
+   },
+   "flag_cycles4": 26208,
+   "flag_cycles6": 5494608
+  }
+ ],
+ "kind": "E12-cycles",
+ "experiment": "E12",
+ "run_id": "1d83879875df450f90ae1649c8cfbca5",
+ "status": "complete",
+ "started": "2026-10-30T03:13:22",
+ "updated": "2026-10-30T03:13:22",
+ "finished": "2026-10-30T03:13:22",
+ "software": {
+  "stim": "1.16.0",
+  "ldpc": "2.4.1",
+  "numpy": "2.5.3",
+  "scipy": "1.18.1",
+  "marimo": "0.25.0",
+  "numba": "0.67.0",
+  "matplotlib": "3.11.2",
+  "pymatching": "2.4.0",
+  "relay-bp": null,
+  "psutil": "7.2.2"
+ },
+ "environment": {
+  "python": "3.12.13",
+  "implementation": "CPython",
+  "platform": "Windows-11-10.0.26100-SP0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD",
+  "cpu_count": 16,
+  "numba": "numba 0.67.0",
+  "timing": {
+   "affinity": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+   ],
+   "pinned": false,
+   "logical_cores": 16,
+   "physical_cores": 8,
+   "power_plan": "Power saver",
+   "cpu_mhz": 3401,
+   "cpu_max_mhz": 3401,
+   "on_battery": null,
+   "load_percent": 8.0,
+   "process_priority": "32"
+  }
+ },
+ "code": {
+  "file": "FlaggedDecoding.py",
+  "sha256": "4f290232cf460d7e95183886f823218a93c5edaeab50e2a723e5c93d15d09745",
+  "git_commit": null,
+  "git_dirty": null
+ },
+ "stim_selfcheck": {
+  "digest": "942e75d1004e5106e4540189a60e59500691e08a49bbc29ee4e0220067e5b2d5",
+  "stim": "1.16.0",
+  "machine": "AMD64",
+  "processor": "AMD64 Family 25 Model 33 Stepping 2, AuthenticAMD"
+ }
+}

@@ -1,0 +1,10 @@
+{
+ "data_file": "E04_144-12-12_T12_p0.001_20000shots_seed2026110402_flags_detZ_dec0d782fa0_w1.json",
+ "data_sha256": "0ff23881bc9399ab7dcc8a620fffe02bd9e7dcd897354b23cb595a592aef4d94",
+ "run_started": "2026-10-29T22:43:24",
+ "run_status": "complete",
+ "run_id": "057eed2ff8a642b499ef7beb0ec9298a",
+ "exported": "2026-10-29T23:05:15",
+ "code_sha256": "4f290232cf460d7e95183886f823218a93c5edaeab50e2a723e5c93d15d09745",
+ "export_type": "fresh run"
+}
